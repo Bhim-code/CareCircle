@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "CareCircle",
+    "slug": "carecircle",
+    "version": "1.0.0",
+    "scheme": "carecircle",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#EEF4F6",
+    "ios": { "supportsTablet": true, "bundleIdentifier": "com.carecircle.app" },
+    "android": {
+      "package": "com.carecircle.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#1F5F7A",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": { "bundler": "metro", "output": "single", "favicon": "./assets/favicon.png" },
+    "plugins": ["expo-router", "expo-system-ui"]
+  }
+}
