@@ -1,8 +1,10 @@
 import { env, isSupabaseConfigured } from './config/env';
 import type { IAuthService } from './domain/services/IAuthService';
 import type { IDevControls } from './domain/services/IDevControls';
+import type { IPreferencesStore } from './domain/services/IPreferencesStore';
 import { DevModeAuthService } from './infrastructure/dev/DevModeAuthService';
 import { DEMO_ACCOUNTS, DemoAuthService, type DemoAccount } from './infrastructure/demo/DemoAuthService';
+import { AsyncPreferencesStore } from './infrastructure/storage/AsyncPreferencesStore';
 import { AsyncSessionStorage } from './infrastructure/storage/AsyncSessionStorage';
 import { createSupabaseClient } from './infrastructure/supabase/createSupabaseClient';
 import { SupabaseAuthService } from './infrastructure/supabase/SupabaseAuthService';
@@ -57,4 +59,13 @@ export function createContainer(): Container {
     demoAccounts: useDemo ? DEMO_ACCOUNTS : [],
     devControls,
   };
+}
+
+/**
+ * Per-person settings (larger text, notification choices) are kept on the device.
+ * Built separately from the main container because only the signed-in part of
+ * the app needs them.
+ */
+export function createPreferencesStore(): IPreferencesStore {
+  return new AsyncPreferencesStore();
 }

@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { firstName, greetingFor } from '@/application/greeting';
@@ -62,6 +63,10 @@ export default function DashboardScreen() {
         </Card>
       </Can>
 
+      <View style={styles.profile}>
+        <Button label="Profile and settings" variant="secondary" onPress={() => router.push('/profile')} />
+      </View>
+
       <View style={styles.signOut}>
         <Button label="Sign out" variant="secondary" loading={loading} onPress={() => void run(signOut)} />
       </View>
@@ -76,6 +81,7 @@ export default function DashboardScreen() {
 
 const styles = StyleSheet.create({
   header: { gap: spacing.sm, marginTop: spacing.lg, marginBottom: spacing.lg },
+  profile: { marginTop: spacing.md },
   signOut: { marginTop: spacing.md },
   notice: { marginTop: spacing.lg, textAlign: 'center' },
 });
