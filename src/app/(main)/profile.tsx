@@ -1,4 +1,3 @@
-import { router } from 'expo-router';
 import React from 'react';
 import { Linking, StyleSheet, View } from 'react-native';
 import { profileSectionsFor } from '@/application/profileSections';
@@ -9,17 +8,11 @@ import { Button } from '@/presentation/components/Button';
 import { Card } from '@/presentation/components/Card';
 import { RoleBadge } from '@/presentation/components/RoleBadge';
 import { Screen } from '@/presentation/components/Screen';
-import { TextLink } from '@/presentation/components/TextLink';
 import { ToggleRow } from '@/presentation/components/ToggleRow';
 import { useSubmit } from '@/presentation/hooks/useSubmit';
 import { useAuth } from '@/presentation/providers/AuthProvider';
 import { usePreferences } from '@/presentation/providers/PreferencesProvider';
 import { colors, roleAccent, spacing } from '@/presentation/theme/theme';
-
-function goBack() {
-  if (router.canGoBack()) router.back();
-  else router.replace('/');
-}
 
 /** One label and its value, e.g. "Email" and the address. */
 function DetailRow({ label, value }: { label: string; value: string }) {
@@ -47,10 +40,6 @@ export default function ProfileScreen() {
 
   return (
     <Screen>
-      <View style={styles.back}>
-        <TextLink label="‹ Back" onPress={goBack} />
-      </View>
-
       <View style={styles.header}>
         <RoleBadge role={user.role} label={policy.displayName} />
         <AppText variant="title">Profile</AppText>
@@ -149,7 +138,6 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  back: { alignItems: 'flex-start' },
   header: { gap: spacing.sm, marginTop: spacing.sm, marginBottom: spacing.lg },
   detail: { gap: spacing.xs, marginBottom: spacing.md },
   note: { marginTop: spacing.sm },
