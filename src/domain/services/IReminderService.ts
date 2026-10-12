@@ -9,4 +9,10 @@ import type { Reminder } from '../entities/Reminder';
 export interface IReminderService {
   /** The reminders for one day. `day` is written YYYY-MM-DD, in the phone's local time. */
   listForDay(userId: string, day: string): Promise<readonly Reminder[]>;
+
+  /**
+   * Records that the person confirmed they took this medicine. Called only
+   * when the person presses the button, never automatically.
+   */
+  acknowledge(userId: string, reminderId: string): Promise<void>;
 }
