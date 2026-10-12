@@ -12,3 +12,4 @@ export { Screen } from './Screen';
 export { TextField } from './TextField';
 export { TextLink } from './TextLink';
 export { ToggleRow } from './ToggleRow';
+export { FilterChips } from './FilterChips';

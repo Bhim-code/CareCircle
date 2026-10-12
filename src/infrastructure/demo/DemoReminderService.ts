@@ -1,8 +1,6 @@
 import type { Reminder } from '../../domain/entities/Reminder';
 import type { IReminderService } from '../../domain/services/IReminderService';
-
-/** The demo patient's id. DemoAuthService gives its seeded accounts the id "demo-<email>". */
-export const DEMO_PATIENT_ID = 'demo-patient@demo.test';
+import { DEMO_PATIENT_ID } from './demoIds';
 
 // Made-up daily schedule: [medicine, hour, minute, already taken?]
 const DEMO_SCHEDULE: readonly (readonly [string, number, number, boolean])[] = [

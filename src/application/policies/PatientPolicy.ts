@@ -8,5 +8,6 @@ export class PatientPolicy extends RolePolicy {
     'reminders.manage',
     'reminders.acknowledge',
     'caregivers.manage',
+    'records.view',
   ]);
 }
