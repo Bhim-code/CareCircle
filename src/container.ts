@@ -2,10 +2,13 @@ import { env, isSupabaseConfigured } from './config/env';
 import type { IAuthService } from './domain/services/IAuthService';
 import type { IDevControls } from './domain/services/IDevControls';
 import type { IPreferencesStore } from './domain/services/IPreferencesStore';
+import type { IReminderService } from './domain/services/IReminderService';
 import { DevModeAuthService } from './infrastructure/dev/DevModeAuthService';
 import { DEMO_ACCOUNTS, DemoAuthService, type DemoAccount } from './infrastructure/demo/DemoAuthService';
+import { DemoReminderService } from './infrastructure/demo/DemoReminderService';
 import { AsyncPreferencesStore } from './infrastructure/storage/AsyncPreferencesStore';
 import { AsyncSessionStorage } from './infrastructure/storage/AsyncSessionStorage';
+import { EmptyReminderService } from './infrastructure/supabase/EmptyReminderService';
 import { createSupabaseClient } from './infrastructure/supabase/createSupabaseClient';
 import { SupabaseAuthService } from './infrastructure/supabase/SupabaseAuthService';
 
@@ -25,8 +28,13 @@ export interface Container {
  * The demo backend is only ever chosen in development builds (__DEV__),
  * so a release build can never fall back to it by accident.
  */
+/** True when the in-memory demo backend should be used. Never true in a release build. */
+function shouldUseDemo(): boolean {
+  return __DEV__ && (env.demoMode || !isSupabaseConfigured);
+}
+
 export function createContainer(): Container {
-  const useDemo = __DEV__ && (env.demoMode || !isSupabaseConfigured);
+  const useDemo = shouldUseDemo();
 
   let authService: IAuthService;
   if (useDemo) {
@@ -68,4 +76,12 @@ export function createContainer(): Container {
  */
 export function createPreferencesStore(): IPreferencesStore {
   return new AsyncPreferencesStore();
+}
+
+/**
+ * Reminders follow the same choice as the rest of the app: made-up demo
+ * reminders in development, otherwise the real backend (not built yet, so empty).
+ */
+export function createReminderService(): IReminderService {
+  return shouldUseDemo() ? new DemoReminderService() : new EmptyReminderService();
 }
