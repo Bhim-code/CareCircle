@@ -10,7 +10,8 @@ import {
   summarizeToday,
 } from '../src/application/reminders';
 import type { Reminder } from '../src/domain/entities/Reminder';
-import { DEMO_PATIENT_ID, DemoReminderService } from '../src/infrastructure/demo/DemoReminderService';
+import { DEMO_PATIENT_ID } from '../src/infrastructure/demo/demoIds';
+import { DemoReminderService } from '../src/infrastructure/demo/DemoReminderService';
 import { EmptyReminderService } from '../src/infrastructure/supabase/EmptyReminderService';
 
 // Monday 12 October 2026. Dates are built in local time, like the app does.
