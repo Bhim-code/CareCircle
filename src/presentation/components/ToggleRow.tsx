@@ -30,7 +30,7 @@ export function ToggleRow({ label, description, value, onValueChange }: ToggleRo
         ) : null}
       </View>
       {/* The row handles the touch and the screen reader; the switch is only the picture. */}
-      <View pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants">
+      <View style={styles.picture} accessible={false} importantForAccessibility="no-hide-descendants">
         <Switch
           value={value}
           trackColor={{ false: colors.line, true: colors.harbor }}
@@ -50,4 +50,5 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   text: { flex: 1, gap: spacing.xs },
+  picture: { pointerEvents: 'none' },
 });

@@ -114,7 +114,7 @@ const styles = StyleSheet.create({
   collapsed: {
     position: 'absolute',
     right: spacing.md,
-    bottom: spacing.xl,
+    bottom: 96, // above the bottom tab bar
     minWidth: 48,
     minHeight: 48,
     borderRadius: radius.pill,
@@ -127,7 +127,7 @@ const styles = StyleSheet.create({
   panel: {
     position: 'absolute',
     right: spacing.md,
-    bottom: spacing.xl,
+    bottom: 96, // above the bottom tab bar
     width: 232,
     backgroundColor: colors.paper,
     borderRadius: radius.card,
