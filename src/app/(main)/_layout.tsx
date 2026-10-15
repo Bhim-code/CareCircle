@@ -3,8 +3,9 @@ import { Tabs } from 'expo-router';
 import React, { useState } from 'react';
 import type { ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { createPreferencesStore, createReminderService } from '@/container';
+import { createPreferencesStore, createRecordEntryService, createReminderService } from '@/container';
 import { PreferencesProvider } from '@/presentation/providers/PreferencesProvider';
+import { RecordEntriesProvider } from '@/presentation/providers/RecordEntriesProvider';
 import { RemindersProvider } from '@/presentation/providers/RemindersProvider';
 import { colors } from '@/presentation/theme/theme';
 
@@ -25,11 +26,13 @@ export default function MainLayout() {
   // Settings belong to the signed-in person, so they are only loaded in this part of the app.
   const [preferencesStore] = useState(createPreferencesStore);
   const [reminderService] = useState(createReminderService);
+  const [entryService] = useState(createRecordEntryService);
   const insets = useSafeAreaInsets();
 
   return (
     <PreferencesProvider store={preferencesStore}>
       <RemindersProvider service={reminderService}>
+      <RecordEntriesProvider service={entryService}>
       <Tabs
         screenOptions={{
           headerShown: false,
@@ -52,6 +55,7 @@ export default function MainLayout() {
         <Tabs.Screen name="records" options={tabOptions('Records', 'document-text-outline', 'document-text', 'Health Records')} />
         <Tabs.Screen name="profile" options={tabOptions('Profile', 'person-outline', 'person')} />
       </Tabs>
+      </RecordEntriesProvider>
       </RemindersProvider>
     </PreferencesProvider>
   );

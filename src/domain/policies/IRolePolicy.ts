@@ -6,7 +6,12 @@ export type Permission =
   | 'caregivers.manage'
   | 'alerts.receive'
   | 'patients.monitor'
-  | 'records.view';
+  | 'records.view'
+  | 'entries.view'
+  | 'entries.medical'
+  | 'entries.behavioural'
+  | 'entries.incident'
+  | 'entries.medication';
 
 /** What a role is allowed to do. The UI asks this; it never checks role names. */
 export interface IRolePolicy {

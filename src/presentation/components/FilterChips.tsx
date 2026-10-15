@@ -12,7 +12,7 @@ export interface FilterChipOption<T extends string> {
 
 interface FilterChipsProps<T extends string> {
   options: readonly FilterChipOption<T>[];
-  selected: T;
+  selected: T | null;
   onSelect: (value: T) => void;
   /** Read out by screen readers for the whole group. */
   accessibilityLabel: string;
