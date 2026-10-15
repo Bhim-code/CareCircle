@@ -13,3 +13,5 @@ export { TextField } from './TextField';
 export { TextLink } from './TextLink';
 export { ToggleRow } from './ToggleRow';
 export { FilterChips } from './FilterChips';
+export { EntryCard } from './EntryCard';
+export { PhotoCapture } from './PhotoCapture';

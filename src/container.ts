@@ -3,13 +3,16 @@ import type { IAuthService } from './domain/services/IAuthService';
 import type { IDevControls } from './domain/services/IDevControls';
 import type { IHealthRecordService } from './domain/services/IHealthRecordService';
 import type { IPreferencesStore } from './domain/services/IPreferencesStore';
+import type { IRecordEntryService } from './domain/services/IRecordEntryService';
 import type { IReminderService } from './domain/services/IReminderService';
 import { DevModeAuthService } from './infrastructure/dev/DevModeAuthService';
 import { DEMO_ACCOUNTS, DemoAuthService, type DemoAccount } from './infrastructure/demo/DemoAuthService';
 import { DemoHealthRecordService } from './infrastructure/demo/DemoHealthRecordService';
+import { DemoRecordEntryService } from './infrastructure/demo/DemoRecordEntryService';
 import { DemoReminderService } from './infrastructure/demo/DemoReminderService';
 import { AsyncPreferencesStore } from './infrastructure/storage/AsyncPreferencesStore';
 import { AsyncSessionStorage } from './infrastructure/storage/AsyncSessionStorage';
+import { EmptyRecordEntryService } from './infrastructure/supabase/EmptyRecordEntryService';
 import { EmptyReminderService } from './infrastructure/supabase/EmptyReminderService';
 import { createSupabaseClient } from './infrastructure/supabase/createSupabaseClient';
 import { EmptyHealthRecordService } from './infrastructure/supabase/EmptyHealthRecordService';
@@ -95,4 +98,13 @@ export function createReminderService(): IReminderService {
  */
 export function createHealthRecordService(): IHealthRecordService {
   return shouldUseDemo() ? new DemoHealthRecordService() : new EmptyHealthRecordService();
+}
+
+/**
+ * Written records (incidents, medical, behavioural, medication notes) make the
+ * same choice: made-up demo entries in development, otherwise the real backend
+ * (not built yet, so empty).
+ */
+export function createRecordEntryService(): IRecordEntryService {
+  return shouldUseDemo() ? new DemoRecordEntryService() : new EmptyRecordEntryService();
 }
