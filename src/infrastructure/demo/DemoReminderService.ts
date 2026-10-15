@@ -1,8 +1,6 @@
 import type { Reminder } from '../../domain/entities/Reminder';
 import type { IReminderService } from '../../domain/services/IReminderService';
-
-/** The demo patient's id. DemoAuthService gives its seeded accounts the id "demo-<email>". */
-export const DEMO_PATIENT_ID = 'demo-patient@demo.test';
+import { DEMO_PATIENT_ID } from './demoIds';
 
 // Made-up daily schedule: [medicine, hour, minute, already taken?]
 const DEMO_SCHEDULE: readonly (readonly [string, number, number, boolean])[] = [
@@ -12,14 +10,14 @@ const DEMO_SCHEDULE: readonly (readonly [string, number, number, boolean])[] = [
   ['Evening heart tablet', 21, 0, false],
 ];
 
-/** Builds the demo reminders for one day, e.g. "2026-10-12". */
-function remindersFor(day: string): Reminder[] {
+/** Builds the demo reminders for one day, e.g. "2026-10-12". Confirmed ones are passed in. */
+function remindersFor(day: string, confirmed: ReadonlySet<string>): Reminder[] {
   const [year, month, date] = day.split('-').map(Number);
   return DEMO_SCHEDULE.map(([medicineName, hour, minute, acknowledged], index) => ({
     id: `${day}-${index}`,
     medicineName,
     scheduledAt: new Date(year, month - 1, date, hour, minute).toISOString(),
-    acknowledged,
+    acknowledged: acknowledged || confirmed.has(`${day}-${index}`),
   }));
 }
 
@@ -29,10 +27,20 @@ function remindersFor(day: string): Reminder[] {
  * Used in development builds only.
  */
 export class DemoReminderService implements IReminderService {
+  /** Reminders the person has confirmed since the app started. Lost on reload, like all demo data. */
+  private readonly confirmed = new Set<string>();
+
   constructor(private readonly latencyMs = 300) {}
 
   async listForDay(userId: string, day: string): Promise<readonly Reminder[]> {
     if (this.latencyMs > 0) await new Promise((resolve) => setTimeout(resolve, this.latencyMs));
-    return userId === DEMO_PATIENT_ID ? remindersFor(day) : [];
+    return userId === DEMO_PATIENT_ID ? remindersFor(day, this.confirmed) : [];
+  }
+
+  async acknowledge(userId: string, reminderId: string): Promise<void> {
+    if (this.latencyMs > 0) await new Promise((resolve) => setTimeout(resolve, this.latencyMs));
+    // Only the demo patient owns reminders, so nobody else can confirm one.
+    if (userId !== DEMO_PATIENT_ID) throw new Error('Reminder not found.');
+    this.confirmed.add(reminderId);
   }
 }

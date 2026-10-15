@@ -7,5 +7,9 @@ export class CaregiverPolicy extends RolePolicy {
   protected readonly permissions: ReadonlySet<Permission> = new Set<Permission>([
     'alerts.receive',
     'patients.monitor',
+    'entries.view',
+    'entries.behavioural',
+    'entries.incident',
+    'entries.medication',
   ]);
 }

@@ -1,20 +1,19 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
-import React, { useState } from 'react';
+import React from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { firstName, greetingFor } from '@/application/greeting';
-import { dayKey, formatDate, formatTime, summarizeToday } from '@/application/reminders';
-import { createReminderService } from '@/container';
+import { formatDate, formatTime, summarizeToday } from '@/application/reminders';
 import { AppText } from '@/presentation/components/AppText';
 import { Can } from '@/presentation/components/Can';
 import { ShortcutTile } from '@/presentation/components/ShortcutTile';
 import { StatusPill } from '@/presentation/components/StatusPill';
 import { TextLink } from '@/presentation/components/TextLink';
 import { useNow } from '@/presentation/hooks/useNow';
-import { useReminders } from '@/presentation/hooks/useReminders';
 import { useAuth } from '@/presentation/providers/AuthProvider';
 import { useTextScale } from '@/presentation/providers/PreferencesProvider';
+import { useTodaysReminders } from '@/presentation/providers/RemindersProvider';
 import { colors, radius, roleAccent, spacing } from '@/presentation/theme/theme';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -39,18 +38,12 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const textScale = useTextScale();
   const now = useNow();
-  const [reminderService] = useState(createReminderService);
 
   // Patients see their reminders; caregivers see the people they look after.
   const isPatient = policy?.can('reminders.manage') ?? false;
 
-  // Only the signed-in patient's own reminders are loaded, for today only.
-  const { status, reminders, retry } = useReminders(
-    reminderService,
-    user?.id ?? '',
-    dayKey(now),
-    isPatient,
-  );
+  // Only the signed-in patient's own reminders, for today only (see RemindersProvider).
+  const { status, reminders, retry } = useTodaysReminders();
   const today = summarizeToday(reminders, now);
 
   // The route guard guarantees both exist; this keeps TypeScript honest.

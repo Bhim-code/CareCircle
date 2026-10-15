@@ -1,14 +1,17 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  canAcknowledge,
   dayKey,
   formatDate,
   formatTime,
   reminderStatus,
+  sortByTime,
   summarizeToday,
 } from '../src/application/reminders';
 import type { Reminder } from '../src/domain/entities/Reminder';
-import { DEMO_PATIENT_ID, DemoReminderService } from '../src/infrastructure/demo/DemoReminderService';
+import { DEMO_PATIENT_ID } from '../src/infrastructure/demo/demoIds';
+import { DemoReminderService } from '../src/infrastructure/demo/DemoReminderService';
 import { EmptyReminderService } from '../src/infrastructure/supabase/EmptyReminderService';
 
 // Monday 12 October 2026. Dates are built in local time, like the app does.
@@ -115,5 +118,58 @@ describe('reminder services', () => {
 
   it('is always empty until the real backend exists', async () => {
     assert.deepEqual(await new EmptyReminderService().listForDay(DEMO_PATIENT_ID, '2026-10-12'), []);
+  });
+});
+
+describe('confirming a dose', () => {
+  it('can be done once a reminder is due or missed, but not before', () => {
+    assert.equal(canAcknowledge('upcoming'), false);
+    assert.equal(canAcknowledge('due'), true);
+    assert.equal(canAcknowledge('missed'), true);
+    assert.equal(canAcknowledge('acknowledged'), false);
+  });
+
+  it('marks only the confirmed reminder as taken, and keeps it that way', async () => {
+    const service = new DemoReminderService(0);
+    const before = await service.listForDay(DEMO_PATIENT_ID, '2026-10-12');
+    const target = before.find((item) => !item.acknowledged);
+    assert.ok(target);
+
+    await service.acknowledge(DEMO_PATIENT_ID, target.id);
+
+    const after = await service.listForDay(DEMO_PATIENT_ID, '2026-10-12');
+    assert.equal(after.find((item) => item.id === target.id)?.acknowledged, true);
+    const others = after.filter((item) => item.id !== target.id);
+    const othersBefore = before.filter((item) => item.id !== target.id);
+    assert.deepEqual(
+      others.map((item) => item.acknowledged),
+      othersBefore.map((item) => item.acknowledged),
+    );
+  });
+
+  it('never marks anything as taken on its own', async () => {
+    const service = new DemoReminderService(0);
+    const first = await service.listForDay(DEMO_PATIENT_ID, '2026-10-12');
+    const second = await service.listForDay(DEMO_PATIENT_ID, '2026-10-12');
+    assert.deepEqual(first, second);
+  });
+
+  it('does not let anyone else confirm the demo patient\'s reminders', async () => {
+    const service = new DemoReminderService(0);
+    await assert.rejects(() => service.acknowledge('demo-caregiver@demo.test', '2026-10-12-1'));
+    const list = await service.listForDay(DEMO_PATIENT_ID, '2026-10-12');
+    assert.equal(list.find((item) => item.id === '2026-10-12-1')?.acknowledged, false);
+  });
+
+  it('fails clearly when there is no backend yet', async () => {
+    await assert.rejects(() => new EmptyReminderService().acknowledge(DEMO_PATIENT_ID, 'x'));
+  });
+});
+
+describe('sortByTime', () => {
+  it('puts the earliest reminder first without changing the original list', () => {
+    const list = [reminder('b', at(18)), reminder('a', at(8))];
+    assert.deepEqual(sortByTime(list).map((item) => item.id), ['a', 'b']);
+    assert.deepEqual(list.map((item) => item.id), ['b', 'a']);
   });
 });

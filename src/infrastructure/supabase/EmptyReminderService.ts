@@ -12,4 +12,9 @@ export class EmptyReminderService implements IReminderService {
   async listForDay(_userId: string, _day: string): Promise<readonly Reminder[]> {
     return [];
   }
+
+  async acknowledge(_userId: string, _reminderId: string): Promise<void> {
+    // There are no reminders to confirm yet, so this should never be called.
+    throw new Error('Reminders are not available yet.');
+  }
 }
