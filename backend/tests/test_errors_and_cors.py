@@ -107,6 +107,17 @@ def test_wildcard_cors_rejected_in_production(monkeypatch):
 
 def test_docs_hidden_in_production(monkeypatch):
     monkeypatch.setenv("ENVIRONMENT", "production")
-    prod = TestClient(create_app(Settings()))
+    prod = TestClient(create_app(Settings()), base_url="https://api.test")
     assert prod.get("/docs").status_code == 404
     assert prod.get("/openapi.json").status_code == 404
+
+
+def test_env_example_loads_as_copied(monkeypatch):
+    """Copying .env.example to .env must give a working configuration."""
+    from tests.conftest import BACKEND
+    for name in ("ENVIRONMENT", "CORS_ORIGINS", "JWT_SECRET", "PHOTO_DIR", "DATABASE_URL"):
+        monkeypatch.delenv(name, raising=False)
+    settings = Settings(_env_file=BACKEND / ".env.example")
+    assert settings.environment == "development"
+    assert settings.force_https is False and settings.rate_limit_enabled is True
+    assert settings.cors_origins == ["http://localhost:5500", "http://127.0.0.1:5500"]

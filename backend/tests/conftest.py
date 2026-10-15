@@ -8,6 +8,8 @@ os.environ["DATABASE_URL"] = os.environ.get(
 )
 os.environ["ENVIRONMENT"] = "test"
 os.environ["CORS_ORIGINS"] = "http://localhost:5500"
+os.environ["JWT_SECRET"] = "test-secret-that-is-long-enough-0123456789"
+os.environ["PHOTO_DIR"] = os.path.join(os.path.dirname(__file__), ".photos")
 
 from collections.abc import Iterator  # noqa: E402
 from pathlib import Path  # noqa: E402

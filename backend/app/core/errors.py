@@ -24,6 +24,7 @@ _CODES = {
     405: "method_not_allowed",
     409: "conflict",
     413: "too_large",
+    415: "unsupported_media_type",
     422: "invalid",
     429: "too_many_requests",
 }
@@ -41,8 +42,10 @@ class ApiError(Exception):
     """Raise this from any endpoint to return a contract-shaped error."""
 
     def __init__(self, status: int, message: str | None = None, *, code: str | None = None,
-                 fields: dict[str, str] | None = None) -> None:
+                 fields: dict[str, str] | None = None,
+                 headers: dict[str, str] | None = None) -> None:
         self.status = status
+        self.headers = headers
         self.code = code or _CODES.get(status, "error")
         self.message = message or _DEFAULT_MESSAGES.get(status, "Something went wrong.")
         self.fields = fields
@@ -65,7 +68,8 @@ def _field_name(location: tuple) -> str:
 def install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(ApiError)
     async def _api_error(_: Request, exc: ApiError) -> JSONResponse:
-        return JSONResponse(error_body(exc.code, exc.message, exc.fields), status_code=exc.status)
+        return JSONResponse(error_body(exc.code, exc.message, exc.fields), status_code=exc.status,
+                            headers=exc.headers)
 
     @app.exception_handler(StarletteHTTPException)
     async def _http_error(_: Request, exc: StarletteHTTPException) -> JSONResponse:
