@@ -1,12 +1,18 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
-import React from 'react';
+import React, { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { firstName, greetingFor } from '@/application/greeting';
+import { dayKey, formatDate, formatTime, summarizeToday } from '@/application/reminders';
+import { createReminderService } from '@/container';
 import { AppText } from '@/presentation/components/AppText';
 import { Can } from '@/presentation/components/Can';
 import { ShortcutTile } from '@/presentation/components/ShortcutTile';
+import { StatusPill } from '@/presentation/components/StatusPill';
+import { TextLink } from '@/presentation/components/TextLink';
+import { useNow } from '@/presentation/hooks/useNow';
+import { useReminders } from '@/presentation/hooks/useReminders';
 import { useAuth } from '@/presentation/providers/AuthProvider';
 import { useTextScale } from '@/presentation/providers/PreferencesProvider';
 import { colors, radius, roleAccent, spacing } from '@/presentation/theme/theme';
@@ -32,12 +38,23 @@ export default function HomeScreen() {
   const { user, policy } = useAuth();
   const insets = useSafeAreaInsets();
   const textScale = useTextScale();
+  const now = useNow();
+  const [reminderService] = useState(createReminderService);
+
+  // Patients see their reminders; caregivers see the people they look after.
+  const isPatient = policy?.can('reminders.manage') ?? false;
+
+  // Only the signed-in patient's own reminders are loaded, for today only.
+  const { status, reminders, retry } = useReminders(
+    reminderService,
+    user?.id ?? '',
+    dayKey(now),
+    isPatient,
+  );
+  const today = summarizeToday(reminders, now);
 
   // The route guard guarantees both exist; this keeps TypeScript honest.
   if (!user || !policy) return null;
-
-  // Patients see their reminders; caregivers see the people they look after.
-  const isPatient = policy.can('reminders.manage');
 
   return (
     <ScrollView style={styles.page} showsVerticalScrollIndicator={false}>
@@ -50,10 +67,10 @@ export default function HomeScreen() {
       >
         <View style={styles.column}>
           <AppText variant="title" style={styles.greeting}>
-            {greetingFor(new Date())}, {firstName(user.name) || 'there'}
+            {greetingFor(now)}, {firstName(user.name) || 'there'}
           </AppText>
           <AppText color={colors.inkSoft}>
-            {policy.displayName} · {user.email}
+            {formatDate(now)} · {policy.displayName}
           </AppText>
         </View>
       </View>
@@ -64,21 +81,49 @@ export default function HomeScreen() {
             {isPatient ? "Today's reminders" : 'People you care for'}
           </AppText>
           <View style={styles.summaryRow}>
-            {/* No reminders or linked people exist yet, so this is always 0 for now. */}
             <AppText variant="title" style={{ fontSize: 48 * textScale, lineHeight: 54 * textScale }}>
-              0
+              {/* Patients: how many reminders today. Caregivers: nobody is linked yet, so 0. */}
+              {isPatient ? (status === 'ready' ? today.total : '–') : 0}
             </AppText>
             <AppText color={colors.inkSoft}>{isPatient ? 'scheduled today' : 'linked to you'}</AppText>
           </View>
+          {isPatient && status === 'ready' && today.total > 0 ? (
+            <AppText variant="caption" color={colors.inkSoft} style={styles.counts}>
+              {today.acknowledged} taken · {today.remaining} to go · {today.missed} missed
+            </AppText>
+          ) : null}
           <View style={styles.summaryNote}>
             <Ionicons
               name={isPatient ? 'alarm-outline' : 'notifications-outline'}
               size={24}
               color={colors.harbor}
             />
-            <AppText variant="label" style={styles.flex}>
-              {isPatient ? 'Next reminder: none yet' : 'No alerts right now'}
-            </AppText>
+            <View style={styles.flex}>
+              {!isPatient ? (
+                <AppText variant="label">No alerts right now</AppText>
+              ) : status === 'loading' ? (
+                <AppText variant="label">Loading your reminders…</AppText>
+              ) : status === 'error' ? (
+                <>
+                  <AppText variant="label">We could not load your reminders.</AppText>
+                  <TextLink label="Try again" onPress={retry} />
+                </>
+              ) : today.next ? (
+                <>
+                  <AppText variant="caption" color={colors.inkSoft}>
+                    Next reminder
+                  </AppText>
+                  <AppText variant="label">
+                    {today.next.reminder.medicineName} · {formatTime(today.next.reminder.scheduledAt)}
+                  </AppText>
+                  <StatusPill status={today.next.status} />
+                </>
+              ) : today.total > 0 ? (
+                <AppText variant="label">No more reminders today</AppText>
+              ) : (
+                <AppText variant="label">No reminders yet</AppText>
+              )}
+            </View>
           </View>
         </View>
 
@@ -157,9 +202,10 @@ const styles = StyleSheet.create({
     boxShadow: '0px 4px 12px rgba(20, 35, 43, 0.08)',
   },
   summaryRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm, marginVertical: spacing.sm },
+  counts: { marginBottom: spacing.md },
   summaryNote: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: spacing.sm,
     backgroundColor: colors.mist,
     borderRadius: radius.field,

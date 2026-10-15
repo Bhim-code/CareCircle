@@ -1,0 +1,38 @@
+import type { Reminder } from '../../domain/entities/Reminder';
+import type { IReminderService } from '../../domain/services/IReminderService';
+
+/** The demo patient's id. DemoAuthService gives its seeded accounts the id "demo-<email>". */
+export const DEMO_PATIENT_ID = 'demo-patient@demo.test';
+
+// Made-up daily schedule: [medicine, hour, minute, already taken?]
+const DEMO_SCHEDULE: readonly (readonly [string, number, number, boolean])[] = [
+  ['Blood pressure tablet', 8, 0, true],
+  ['Metformin', 13, 0, false],
+  ['Vitamin D', 18, 30, false],
+  ['Evening heart tablet', 21, 0, false],
+];
+
+/** Builds the demo reminders for one day, e.g. "2026-10-12". */
+function remindersFor(day: string): Reminder[] {
+  const [year, month, date] = day.split('-').map(Number);
+  return DEMO_SCHEDULE.map(([medicineName, hour, minute, acknowledged], index) => ({
+    id: `${day}-${index}`,
+    medicineName,
+    scheduledAt: new Date(year, month - 1, date, hour, minute).toISOString(),
+    acknowledged,
+  }));
+}
+
+/**
+ * Made-up reminders for running the app with no server, so the dashboard can be
+ * seen working. Only the demo patient has any; everyone else starts empty.
+ * Used in development builds only.
+ */
+export class DemoReminderService implements IReminderService {
+  constructor(private readonly latencyMs = 300) {}
+
+  async listForDay(userId: string, day: string): Promise<readonly Reminder[]> {
+    if (this.latencyMs > 0) await new Promise((resolve) => setTimeout(resolve, this.latencyMs));
+    return userId === DEMO_PATIENT_ID ? remindersFor(day) : [];
+  }
+}
