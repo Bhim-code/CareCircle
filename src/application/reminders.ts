@@ -73,3 +73,21 @@ export const STATUS_LABEL: Record<ReminderStatus, string> = {
   acknowledged: 'Taken',
   missed: 'Missed',
 };
+
+/** Only a reminder that is due or missed can be confirmed. Not one that is still to come. */
+export function canAcknowledge(status: ReminderStatus): boolean {
+  return status === 'due' || status === 'missed';
+}
+
+/** One plain sentence about where a reminder stands. */
+export const STATUS_HELP: Record<ReminderStatus, string> = {
+  upcoming: 'It is not time for this medicine yet.',
+  due: 'It is time to take this medicine. Press the button once you have taken it.',
+  acknowledged: 'You confirmed that you took this medicine.',
+  missed: 'This reminder was not confirmed. If you did take it, you can still tell us.',
+};
+
+/** Reminders in the order they happen during the day. */
+export function sortByTime(reminders: readonly Reminder[]): Reminder[] {
+  return [...reminders].sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
+}

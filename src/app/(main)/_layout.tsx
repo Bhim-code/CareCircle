@@ -3,8 +3,9 @@ import { Tabs } from 'expo-router';
 import React, { useState } from 'react';
 import type { ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { createPreferencesStore } from '@/container';
+import { createPreferencesStore, createReminderService } from '@/container';
 import { PreferencesProvider } from '@/presentation/providers/PreferencesProvider';
+import { RemindersProvider } from '@/presentation/providers/RemindersProvider';
 import { colors } from '@/presentation/theme/theme';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -23,10 +24,12 @@ function tabOptions(title: string, icon: IconName, selectedIcon: IconName, spoke
 export default function MainLayout() {
   // Settings belong to the signed-in person, so they are only loaded in this part of the app.
   const [preferencesStore] = useState(createPreferencesStore);
+  const [reminderService] = useState(createReminderService);
   const insets = useSafeAreaInsets();
 
   return (
     <PreferencesProvider store={preferencesStore}>
+      <RemindersProvider service={reminderService}>
       <Tabs
         screenOptions={{
           headerShown: false,
@@ -49,6 +52,7 @@ export default function MainLayout() {
         <Tabs.Screen name="records" options={tabOptions('Records', 'document-text-outline', 'document-text', 'Health Records')} />
         <Tabs.Screen name="profile" options={tabOptions('Profile', 'person-outline', 'person')} />
       </Tabs>
+      </RemindersProvider>
     </PreferencesProvider>
   );
 }
