@@ -77,8 +77,10 @@ backend/
     core/config.py    Settings from the environment
     core/errors.py    ApiError and the contract's error shape
     db/session.py     Database engine and the get_db dependency
+    db/models.py      Every table (keep in step with migrations/)
     schemas/base.py   CamelModel: snake_case in Python, camelCase in JSON
     api/routes/       One file per feature (health.py now; auth, reminders... next)
+  migrations/         Alembic migrations (the real schema)
   tests/              pytest
   docker-compose.yml  Local PostgreSQL
 ```
@@ -93,4 +95,75 @@ backend/
 
 ## Database tables
 
-Coming in Issue 2 (schema and Alembic migrations), along with the table diagram.
+The schema lives in Alembic migrations (`migrations/versions/`), so a new database can be
+built from nothing:
+
+```bash
+alembic upgrade head                              # build or update the database
+alembic revision --autogenerate -m "what changed" # after editing app/db/models.py
+alembic downgrade -1                              # undo the last migration
+```
+
+`pytest` builds its own database from these migrations on every run and fails if
+`app/db/models.py` and the migrations disagree.
+
+```mermaid
+erDiagram
+    users ||--o{ auth_sessions : "signs in"
+    users ||--o{ password_reset_tokens : "resets"
+    users ||--o| user_preferences : has
+    users ||--o{ push_tokens : has
+    users ||--o{ care_links : "patient invites"
+    users ||--o{ care_links : "caregiver accepts"
+    users ||--o{ medicines : takes
+    medicines ||--o{ reminders : "job creates"
+    reminders ||--o{ alerts_sent : "missed-dose alerts"
+    users ||--o{ health_documents : owns
+    users ||--o{ record_entries : "about patient"
+    record_entries ||--o{ record_entry_history : "earlier versions"
+    record_entries ||--o| entry_photos : "photo"
+    users ||--o{ access_log : "viewer / patient"
+
+    users { uuid id PK
+            string email UK "lowercase"
+            string role "patient | caregiver | admin | supervisor"
+            string password_hash "argon2"
+            bool is_active
+            string timezone "IANA, e.g. America/St_Johns" }
+    care_links { uuid id PK
+                 uuid patient_id FK
+                 uuid caregiver_id FK "null until accepted"
+                 string invited_email
+                 string status "pending | active | ended" }
+    medicines { uuid id PK
+                uuid patient_id FK
+                string name
+                string_array times "HH:MM local"
+                date start_date
+                date end_date "nullable" }
+    reminders { uuid id PK
+                uuid medicine_id FK
+                timestamptz scheduled_at "UTC"
+                timestamptz acknowledged_at "set only by the patient" }
+    record_entries { uuid id PK
+                     uuid patient_id FK
+                     string kind "medical | behavioural | incident | medication"
+                     timestamptz recorded_at "server sets"
+                     uuid recorded_by FK "server sets"
+                     int version }
+    access_log { bigint id PK
+                 uuid viewer_id FK
+                 uuid patient_id FK
+                 string action
+                 timestamptz at "append-only" }
+```
+
+Rules the database enforces on its own:
+
+- `role` can only be one of the four roles; emails are unique and stored in lowercase.
+- Only one open (pending or active) link between a patient and an email address.
+- `severity` only on incidents, `mood` only on behavioural records, `medicineName` only on
+  medication records. Text limits match the contract (100 and 2000 characters).
+- A reminder exists once per medicine and time; an alert is sent once per reminder,
+  person and channel.
+- `access_log` rows can be added but never changed or deleted (a trigger refuses).
