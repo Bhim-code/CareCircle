@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>CareCircle Admin</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' http://localhost:8000 http://127.0.0.1:8000 https:; img-src 'self' data: blob: http://localhost:8000 http://127.0.0.1:8000 https:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/app.css">
+  <script src="config.js"></script>
+</head>
+<body class="bg-paper text-ink font-sans antialiased">
+  <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:m-2 focus:bg-white focus:p-2">Skip to content</a>
+  <div id="app"></div>
+  <div id="toast" role="status" aria-live="polite"
+       class="fixed bottom-4 right-4 hidden max-w-sm rounded-md bg-ink px-4 py-3 text-sm text-white"></div>
+  <dialog id="confirm" class="w-[min(28rem,calc(100%-2rem))] rounded-lg p-0 text-ink">
+    <form method="dialog" class="p-6">
+      <h2 id="confirm-title" class="text-lg font-bold"></h2>
+      <p id="confirm-body" class="mt-2 text-muted"></p>
+      <div class="mt-6 flex justify-end gap-3">
+        <button value="cancel" class="rounded-md px-4 py-2 hover:bg-paper">Cancel</button>
+        <button value="ok" id="confirm-ok" class="rounded-md bg-missed px-4 py-2 font-bold text-white"></button>
+      </div>
+    </form>
+  </dialog>
+  <script src="app.js"></script>
+</body>
+</html>
