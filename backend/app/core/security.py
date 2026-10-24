@@ -11,7 +11,10 @@ from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatc
 
 from app.core.config import get_settings
 
-_hasher = PasswordHasher()  # argon2id with the library's recommended settings
+# argon2id with the library's recommended settings. Tests use cheap settings to stay fast;
+# hashes made either way verify fine, because the settings are stored inside each hash.
+_hasher = (PasswordHasher(time_cost=1, memory_cost=1024, parallelism=1)
+           if get_settings().environment == "test" else PasswordHasher())
 # Checked against when the email is unknown, so both cases take the same time.
 _DUMMY_HASH = _hasher.hash("not-a-real-password-" + secrets.token_hex(8))
 _ALGORITHM = "HS256"

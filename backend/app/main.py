@@ -5,7 +5,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth, care_links, health, health_records, me, medicines
+from app.api.routes import auth, care_links, entries, health, health_records, me, medicines
 from app.core.config import Settings, get_settings
 from app.core.errors import install_error_handlers
 from app.core.https import HttpsOnlyMiddleware, SecurityHeadersMiddleware
@@ -40,8 +40,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                            trust_proxy_headers=settings.trust_proxy_headers)
 
     install_error_handlers(app)
-    for module in (health, auth, me, care_links, medicines, health_records):
-        app.include_router(module.router)
+    for router in (health.router, auth.router, me.router, care_links.router, medicines.router,
+                   health_records.router, entries.router, entries.files_router):
+        app.include_router(router)
     return app
 
 

@@ -65,6 +65,24 @@ def _field_name(location: tuple) -> str:
     return ".".join(parts) or "request"
 
 
+def _friendly(err: dict) -> str:
+    """Plain-language messages for the common cases; pydantic's text otherwise."""
+    kind, ctx = err.get("type", ""), err.get("ctx") or {}
+    if kind == "string_too_long":
+        return f"Please keep this under {ctx.get('max_length')} characters."
+    if kind == "string_too_short":
+        return "This is required." if ctx.get("min_length") == 1 else \
+            f"Please use at least {ctx.get('min_length')} characters."
+    if kind == "missing":
+        return "This is required."
+    if kind in ("literal_error", "enum"):
+        return f"Choose one of: {ctx.get('expected', 'the allowed values')}."
+    if kind == "extra_forbidden":
+        return "This field is not allowed."
+    message = str(err.get("msg", "Invalid value."))
+    return message.removeprefix("Value error, ")
+
+
 def install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(ApiError)
     async def _api_error(_: Request, exc: ApiError) -> JSONResponse:
@@ -86,7 +104,7 @@ def install_error_handlers(app: FastAPI) -> None:
         fields: dict[str, str] = {}
         for err in exc.errors():
             # Use pydantic's message only; never echo the submitted value back.
-            fields.setdefault(_field_name(tuple(err.get("loc", ()))), str(err.get("msg", "Invalid value.")))
+            fields.setdefault(_field_name(tuple(err.get("loc", ()))), _friendly(err))
         return JSONResponse(
             error_body("invalid", "Some fields need attention.", fields), status_code=422
         )
