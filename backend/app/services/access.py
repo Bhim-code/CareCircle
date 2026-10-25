@@ -22,11 +22,13 @@ logger = logging.getLogger("carecircle.access")
 
 
 def caregiver_is_linked(db: Session, caregiver_id: uuid.UUID, patient_id: uuid.UUID) -> bool:
+    """An ACTIVE link to a patient whose account is still turned on."""
     return db.scalar(
-        select(CareLink.id).where(
+        select(CareLink.id).join(User, User.id == CareLink.patient_id).where(
             CareLink.caregiver_id == caregiver_id,
             CareLink.patient_id == patient_id,
             CareLink.status == "active",
+            User.is_active.is_(True),
         ).limit(1)
     ) is not None
 

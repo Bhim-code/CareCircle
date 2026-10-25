@@ -41,6 +41,8 @@ class MedicineOut(CamelModel):
     times: list[str]
     start_date: date
     end_date: date | None
+    # Addition: when the patient stopped it (null while active).
+    stopped_at: UtcDateTime | None = None
 
 
 class ReminderOut(CamelModel):

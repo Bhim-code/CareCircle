@@ -5,8 +5,9 @@ zone. A reminder is one of those doses as an exact UTC moment. Rows are created
 idempotently (the database ignores duplicates), so the job can run as often as
 we like and the API can also fill in a day on demand.
 
-Reminders are never created for a moment before the medicine was added, so
-adding a medicine at 3 pm never produces a "missed" 8 am dose or a false alert.
+Reminders are never created for a moment before the medicine was added (so adding
+a medicine at 3 pm never produces a "missed" 8 am dose or a false alert), nor at or
+after the moment it was stopped.
 """
 
 import uuid
@@ -47,14 +48,15 @@ def generate_for_patient(db: Session, patient: User, days: list[date],
                          medicine_id: uuid.UUID | None = None) -> int:
     """Create missing reminder rows for these local days. Returns how many were new."""
     tz = ZoneInfo(patient.timezone)
-    query = select(Medicine).where(Medicine.patient_id == patient.id)
+    query = select(Medicine).where(Medicine.patient_id == patient.id, Medicine.stopped_at.is_(None))
     if medicine_id:
         query = query.where(Medicine.id == medicine_id)
     rows = []
     for medicine in db.scalars(query):
         for day in days:
             for moment in _moments(medicine, day, tz):
-                if moment >= medicine.created_at:
+                if moment >= medicine.created_at and (medicine.stopped_at is None
+                                                      or moment < medicine.stopped_at):
                     rows.append({"patient_id": patient.id, "medicine_id": medicine.id,
                                  "scheduled_at": moment})
     if not rows:
@@ -71,6 +73,7 @@ def generate_upcoming(db: Session, now: datetime | None = None) -> int:
     patients = db.scalars(select(User).where(
         User.role == "patient", User.is_active.is_(True),
         User.id.in_(select(Medicine.patient_id).where(
+            Medicine.stopped_at.is_(None),
             or_(Medicine.end_date.is_(None), Medicine.end_date >= (now - timedelta(days=1)).date())))))
     for patient in patients:
         today = now.astimezone(ZoneInfo(patient.timezone)).date()

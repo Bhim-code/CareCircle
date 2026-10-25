@@ -62,6 +62,15 @@ class Settings(BaseSettings):
     push_provider: Literal["log", "expo"] = "log"
     missed_dose_after_minutes: int = Field(default=60, ge=1)
 
+    @field_validator("database_url")
+    @classmethod
+    def _psycopg_driver(cls, value: str) -> str:
+        """Hosts like Render and Railway give postgres://... ; SQLAlchemy needs the driver named."""
+        for prefix in ("postgres://", "postgresql://"):
+            if value.startswith(prefix):
+                return "postgresql+psycopg://" + value[len(prefix):]
+        return value
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_origins(cls, value: object) -> object:

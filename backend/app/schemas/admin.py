@@ -53,6 +53,7 @@ class AdminMedicineOut(CamelModel):
     times: list[str]
     start_date: date
     end_date: date | None
+    stopped_at: UtcDateTime | None
 
 
 class PatientDetailOut(CamelModel):

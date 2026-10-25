@@ -50,20 +50,18 @@ def add_medicine(body: MedicineIn, me: CurrentUser = Depends(patient_only),
 @router.delete("/medicines/{medicine_id}", status_code=204)
 def stop_medicine(medicine_id: uuid.UUID, me: CurrentUser = Depends(patient_only),
                   db: Session = Depends(get_db)) -> Response:
-    """Addition to the contract: stop a medicine. Past reminders stay as history;
-    future unconfirmed ones are removed."""
+    """Addition to the contract: stop a medicine from now on. Past and confirmed
+    doses stay as history; future unconfirmed ones are removed. Stopping twice is harmless."""
     medicine = db.scalar(select(Medicine).where(Medicine.id == medicine_id,
-                                                Medicine.patient_id == me.id))
+                                                Medicine.patient_id == me.id).with_for_update())
     if medicine is None:
         raise ApiError(404)
-    today = local_today(ZoneInfo(me.user.timezone))
-    if medicine.start_date >= today:
-        db.delete(medicine)  # never started: remove it and its reminders entirely
-    else:
-        medicine.end_date = today - timedelta(days=1)  # no new reminders from today on
-        db.execute(delete(Reminder).where(Reminder.medicine_id == medicine.id,
-                                          Reminder.scheduled_at > utcnow(),
-                                          Reminder.acknowledged_at.is_(None)))
+    now = utcnow()
+    if medicine.stopped_at is None:
+        medicine.stopped_at = now
+    db.execute(delete(Reminder).where(Reminder.medicine_id == medicine.id,
+                                      Reminder.scheduled_at > now,
+                                      Reminder.acknowledged_at.is_(None)))
     db.commit()
     return Response(status_code=204)
 

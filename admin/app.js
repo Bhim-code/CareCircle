@@ -425,7 +425,8 @@ async function patientPage(root, patientId, tab) {
     fact('Time zone', p.timezone),
     fact('Caregivers', detail.caregivers.length ? detail.caregivers.map((c) => c.name).join(', ') : 'None linked'),
     fact('Medicines', detail.medicines.length
-      ? detail.medicines.map((m) => `${m.name} at ${m.times.join(', ')}${m.endDate ? ` (until ${fmtDate(m.endDate)})` : ''}`).join('; ')
+      ? detail.medicines.map((m) => `${m.name} at ${m.times.join(', ')}${m.stoppedAt ? ` (stopped ${fmtDateTime(m.stoppedAt)})`
+        : m.endDate ? ` (until ${fmtDate(m.endDate)})` : ''}`).join('; ')
       : 'None added'),
     fact('Records', String(detail.entriesTotal)),
     fact('Account', p.isActive ? 'Active' : 'Turned off'));

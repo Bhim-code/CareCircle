@@ -32,7 +32,13 @@ python -m venv .venv
 pip install -r requirements-dev.txt
 ```
 
-Then copy `.env.example` to `.env` (Windows: `copy .env.example .env`).
+Then copy `.env.example` to `.env` (Windows: `copy .env.example .env`), build the
+tables, and load the demo data:
+
+```bash
+alembic upgrade head
+python -m app.seed
+```
 
 **3. Start the API** (the one command):
 
@@ -54,44 +60,109 @@ or `DATABASE_URL` in `.env` is wrong.
 pytest
 ```
 
-The tests always use `TEST_DATABASE_URL` (default `carecircle_test`), never your real data.
+114 tests run against a real PostgreSQL database built from the migrations, in about
+20 seconds. They always use `TEST_DATABASE_URL` (default `carecircle_test`), never your
+data. GitHub Actions runs them on every push (`.github/workflows/backend.yml`).
+
+## Demo data and staff accounts
+
+```bash
+python -m app.seed      # demo patients, caregiver, supervisor, admin; password demo1234
+python -m app.cli create-staff --role supervisor --email sue@example.com --name "Sue"
+python -m app.cli set-active --email someone@example.com --inactive
+```
+
+Admin and supervisor accounts can only be made with `app.cli` (never by sign-up).
+The seed accounts are listed in `app/seed.py` (`ana@demo.carecircle.test` etc.).
+
+## Background jobs
+
+Run in a second terminal while the API is running:
+
+```bash
+python -m app.jobs                 # keeps running: reminders, alerts, pushes, cleanup
+python -m app.jobs once alerts     # run one job now: reminders | alerts | due | cleanup
+```
+
+Missed-dose alerts go to linked caregivers who turned them on, 60 minutes after a dose
+that was not confirmed, once each. With no `SMTP_HOST`, emails are written to the log;
+calls and pushes are logged for the demo.
+
+## Admin panel
+
+See `../admin/README.md`. In short: `cd ../admin && python -m http.server 5500`, then
+open http://localhost:5500.
+
+## Endpoints
+
+The full list with request and response shapes is at http://localhost:8000/docs.
+
+| Area | Endpoints |
+|---|---|
+| Sign-in | `POST /auth/sign-up`, `/auth/sign-in`, `/auth/refresh`, `/auth/sign-out`, `/auth/password-reset`, `/auth/password-reset/confirm` |
+| Me | `GET/PATCH /me`, `GET/PUT /me/preferences`, `PUT/DELETE /me/push-token`, `GET /me/access-log` |
+| Care links | `POST /care-links/invitations`, `GET /care-links`, `POST /care-links/invitations/{id}/accept`, `DELETE /care-links/{id}` |
+| Medicines | `GET/POST /medicines`, `DELETE /medicines/{id}`, `GET /reminders?day=`, `POST /reminders/{id}/acknowledge` |
+| Records | `GET /health-records`, `GET/POST /entries`, `PUT /entries/{id}`, `POST /entries/photo`, `GET /files/photos/{id}` |
+| Admin panel | `GET /admin/overview`, `/admin/users`, `PATCH /admin/users/{id}`, `/admin/patients/{id}` (+ `/reminders`, `/documents`, `/entries`, `.csv` exports), `/admin/access-log` |
+
+Where the API adds to or differs from `api-contract.md`: **`docs/CONTRACT-NOTES.md`**
+(please share with Biplav).
+
+## More documents
+
+- `docs/DESIGN.md`: design, tables, access rules, security and testing (for the report)
+- `docs/DEPLOY.md`: the demo-day checklist and how to host it
+- `docs/CONTRACT-NOTES.md`: notes for the app developer
 
 ## Settings
 
-Every setting comes from environment variables or `.env`. Nothing secret goes in Git.
+Every setting comes from environment variables or `.env`; `.env.example` lists and
+explains all of them. A blank value means "use the default". The important ones:
 
 | Variable | Example | What it does |
 |---|---|---|
-| `ENVIRONMENT` | `development` | `production` hides `/docs` and forbids `CORS_ORIGINS=*` |
-| `DATABASE_URL` | `postgresql+psycopg://user:pass@localhost:5432/carecircle` | The API's database |
+| `ENVIRONMENT` | `development` | `production` hides `/docs`, forces HTTPS, refuses `CORS_ORIGINS=*` and the placeholder secret |
+| `DATABASE_URL` | `postgresql+psycopg://user:pass@localhost:5432/carecircle` | The API's database (`postgres://` from a host is fine) |
 | `TEST_DATABASE_URL` | `...5432/carecircle_test` | Database used by `pytest` only |
-| `CORS_ORIGINS` | `http://localhost:5500` | Comma-separated browser origins allowed to call the API (the admin panel) |
-| `LOG_LEVEL` | `INFO` | Log detail |
+| `JWT_SECRET` | 48+ random characters | Signs access tokens. Different in every environment. |
+| `CORS_ORIGINS` | `http://localhost:5500` | Browser origins allowed to call the API (the admin panel) |
+| `TRUST_PROXY_HEADERS` | `true` when hosted | Read the client IP and HTTPS from the host's proxy |
+| `PHOTO_DIR` | `storage/photos` | Private folder for photos |
+| `SMTP_HOST` … | | Real email; empty = log only |
+| `PUSH_PROVIDER` | `log` or `expo` | Real phone pushes through Expo |
 
 ## Folder structure
 
 ```
 backend/
   app/
-    main.py           Builds the app: CORS, error handlers, routes
-    core/config.py    Settings from the environment
-    core/errors.py    ApiError and the contract's error shape
-    db/session.py     Database engine and the get_db dependency
-    db/models.py      Every table (keep in step with migrations/)
-    schemas/base.py   CamelModel: snake_case in Python, camelCase in JSON
-    api/routes/       One file per feature (health.py now; auth, reminders... next)
-  migrations/         Alembic migrations (the real schema)
-  tests/              pytest
-  docker-compose.yml  Local PostgreSQL
+    main.py             Builds the app: middleware, error handlers, routes
+    core/               config, errors, security (passwords, tokens), rate limits, HTTPS
+    db/models.py        Every table (keep in step with migrations/)
+    db/session.py       Database engine and the get_db dependency
+    schemas/            Request and response shapes (camelCase JSON)
+    api/deps.py         "Who is asking?" and role guards, used by every endpoint
+    api/routes/         auth, me, care_links, medicines, health_records, entries, admin
+    services/access.py  "May this person see this patient?": the one place for that rule
+    services/           reminders, photos, stats, mailer, sessions
+    jobs/               background jobs and how notifications are sent
+    cli.py              create staff accounts, turn accounts on/off
+    seed.py             demo data
+  migrations/           Alembic migrations (the real schema)
+  tests/                pytest
+  docs/                 design, deployment, notes for the app developer
+  docker-compose.yml    Local PostgreSQL
 ```
 
 ## Conventions for new endpoints
 
 - Request and response bodies extend `CamelModel`. Unknown fields are rejected with 422,
   so nobody can sneak in fields like `"role": "admin"`.
-- To fail, `raise ApiError(404)` (or 401, 403, 422 with `fields=`). Use 404, not 403, when a
-  record belongs to someone else, so the API never reveals that it exists.
-- Error messages and logs never include submitted values, so health information cannot leak.
+- Start from a guard in `api/deps.py` (`patient_only`, `current_user`, …) and check patient
+  access with `services/access.py`. Use 404, not 403, when the data belongs to someone else.
+- To fail, `raise ApiError(404)` (or 401, 403, 422 with `fields=`).
+- Error messages, logs and notifications never include health information or submitted values.
 
 ## Database tables
 
