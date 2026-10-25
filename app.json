@@ -55,7 +55,9 @@
           "recordAudioAndroid": false
         }
       ],
-      "./plugins/withShowWhenLocked"
+      "./plugins/withShowWhenLocked",
+      "expo-asset",
+      "expo-font"
     ],
     "extra": {
       "router": {},
