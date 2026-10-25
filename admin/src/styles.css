@@ -1,0 +1,25 @@
+@font-face {
+  font-family: "Atkinson Hyperlegible";
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/atkinson-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Atkinson Hyperlegible";
+  font-weight: 700;
+  font-display: swap;
+  src: url("fonts/atkinson-700.woff2") format("woff2");
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body { font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 3px solid #2E6A5C; outline-offset: 2px; border-radius: 4px; }
+.ring-arc { transition: stroke-dashoffset 700ms ease-out; }
+dialog::backdrop { background: rgb(28 36 51 / 0.45); }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+@media (prefers-reduced-motion: reduce) {
+  *, .ring-arc { transition: none !important; animation: none !important; }
+}
