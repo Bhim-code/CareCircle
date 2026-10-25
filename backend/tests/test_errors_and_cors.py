@@ -121,3 +121,8 @@ def test_env_example_loads_as_copied(monkeypatch):
     assert settings.environment == "development"
     assert settings.force_https is False and settings.rate_limit_enabled is True
     assert settings.cors_origins == ["http://localhost:5500", "http://127.0.0.1:5500"]
+
+
+def test_host_style_database_urls_are_accepted(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgres://u:p@db.example:5432/cc")
+    assert Settings().database_url == "postgresql+psycopg://u:p@db.example:5432/cc"
