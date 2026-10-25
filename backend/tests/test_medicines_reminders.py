@@ -4,7 +4,9 @@ import uuid
 from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+import pytest
+
+from sqlalchemy import select, update
 
 from app.db.models import Medicine, Reminder, User
 from app.services.reminders import generate_for_patient, generate_upcoming, local_day_bounds
@@ -146,7 +148,7 @@ def test_daylight_saving_day_keeps_local_clock_times(db):
     assert end - start == timedelta(hours=25)
 
 
-def test_stop_medicine_removes_future_reminders_only(client, db):
+def test_stop_medicine_keeps_history_and_ends_future_doses(client, db):
     ana = sign_up(client, "Ana", "patient")
     past = _add_reminder(db, ana.id, datetime.now(UTC) - timedelta(days=2))
     medicine_id = db.scalar(select(Reminder.medicine_id).where(Reminder.id == uuid.UUID(past)))
@@ -156,8 +158,36 @@ def test_stop_medicine_removes_future_reminders_only(client, db):
     bob = sign_up(client, "Bob", "patient")
     assert client.delete(f"/medicines/{medicine_id}", headers=bob.auth).status_code == 404
     assert client.delete(f"/medicines/{medicine_id}", headers=ana.auth).status_code == 204
+    assert client.delete(f"/medicines/{medicine_id}", headers=ana.auth).status_code == 204
     remaining = list(db.scalars(select(Reminder.id)))
     assert [str(r) for r in remaining] == [past]
+    [medicine] = client.get("/medicines", headers=ana.auth).json()
+    assert medicine["stoppedAt"]
+
+
+def test_stopping_on_the_first_day_keeps_a_confirmed_dose(client, db):
+    # Every hour of the day, so some doses are past and some are still to come.
+    ana = sign_up(client, "Ana", "patient")
+    times = [f"{h:02d}:00" for h in range(0, 24, 2)]
+    today = datetime.now(UTC).date().isoformat()
+    medicine = client.post("/medicines", json={"name": "M", "times": times, "startDate": today},
+                           headers=ana.auth).json()
+    # Pretend the medicine was added yesterday so today's earlier doses exist, then confirm one.
+    db.execute(update(Medicine).where(Medicine.id == uuid.UUID(medicine["id"]))
+               .values(created_at=datetime.now(UTC) - timedelta(days=1)))
+    db.commit()
+    client.get(f"/reminders?day={today}", headers=ana.auth)
+    taken = db.scalar(select(Reminder).where(Reminder.scheduled_at < datetime.now(UTC))
+                      .order_by(Reminder.scheduled_at.desc()).limit(1))
+    if taken is None:
+        pytest.skip("Too early in the UTC day to have a past dose")
+    taken.acknowledged_at = datetime.now(UTC)
+    db.commit()
+
+    assert client.delete(f"/medicines/{medicine['id']}", headers=ana.auth).status_code == 204
+    after = client.get(f"/reminders?day={today}&timezone=UTC", headers=ana.auth).json()
+    assert any(r["acknowledged"] for r in after)  # history kept
+    assert all(r["scheduledAt"] < datetime.now(UTC).isoformat() for r in after)  # nothing new
 
 
 def test_health_records_are_own_only(client, db):

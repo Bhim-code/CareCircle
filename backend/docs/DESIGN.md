@@ -106,14 +106,14 @@ How this is enforced:
 
 ## 5. Testing
 
-`pytest` runs 112 automated tests against a real PostgreSQL database built from the
+`pytest` runs 114 automated tests against a real PostgreSQL database built from the
 migrations (about 20 seconds). Each test starts with empty tables.
 
 | File | What it proves |
 |---|---|
 | `test_auth.py` (22) | Sign-up cannot create staff; same error for bad password or unknown email; forged tokens refused; refresh rotation and theft detection; sign-out and deactivation work at once; password reset; rate limits; HTTPS enforcement |
-| `test_entries.py` (27) | Two patients and two caregivers: nobody reads or edits anyone else's records (404 by id, too); role/kind table; server-set fields; history kept; ending a link removes access; photo type, size, ownership, expiry and forged links |
-| `test_medicines_reminders.py` (12) | Own reminders only; the patient's local day; daylight saving; idempotent generation; "I took it" only by the owner and never by the server |
+| `test_entries.py` (28) | Two patients and two caregivers: nobody reads or edits anyone else's records (404 by id, too); role/kind table; server-set fields; history kept; ending a link removes access; photo type, size, ownership, expiry and forged links |
+| `test_medicines_reminders.py` (13) | Own reminders only; the patient's local day; daylight saving; idempotent generation; "I took it" only by the owner and never by the server |
 | `test_admin.py` (9) | Patients and caregivers refused (and logged); supervisor read only; every view and export logged; CSV injection safe; patients see who viewed them |
 | `test_jobs.py` (10) | Missed-dose alert after 60 minutes, sent once, only to linked caregivers who opted in, retried on failure; due pushes once; no medicine names |
 | `test_care_links.py` (6), `test_preferences.py` (3) | Invitations, accepting, ending; settings per person |

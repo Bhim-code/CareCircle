@@ -60,7 +60,7 @@ or `DATABASE_URL` in `.env` is wrong.
 pytest
 ```
 
-112 tests run against a real PostgreSQL database built from the migrations, in about
+114 tests run against a real PostgreSQL database built from the migrations, in about
 20 seconds. They always use `TEST_DATABASE_URL` (default `carecircle_test`), never your
 data. GitHub Actions runs them on every push (`.github/workflows/backend.yml`).
 

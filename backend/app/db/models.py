@@ -194,6 +194,8 @@ class Medicine(Base):
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
     end_date: Mapped[date | None] = mapped_column(Date)
     created_at: Mapped[datetime] = _created()
+    # Set when the patient stops the medicine. No reminders at or after this moment.
+    stopped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Reminder(Base):

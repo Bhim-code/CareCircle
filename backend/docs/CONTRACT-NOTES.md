@@ -41,7 +41,8 @@ http://localhost:8000/docs.
   Send the phone's zone if the person travels.
 - `POST /reminders/{id}/acknowledge` more than 60 minutes **before** the time gives **422**
   `not_due`. Late confirmations are accepted and stored.
-- `DELETE /medicines/{id}` stops a medicine: past reminders stay, future ones are removed.
+- `DELETE /medicines/{id}` stops a medicine from now on: past and confirmed doses stay, future
+  ones are removed, and the medicine shows `stoppedAt` in `GET /medicines`.
 - Reminders for a day are created on demand when the app asks for it (up to 14 days ahead),
   so the app works even if the background job is not running.
 

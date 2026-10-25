@@ -151,6 +151,16 @@ def test_ending_a_link_removes_read_and_edit_access_at_once(client, people):
     assert client.put(f"/entries/{saved['id']}", json=entry(), headers=sam.auth).status_code == 404
 
 
+def test_turned_off_patient_cannot_be_read_or_edited_by_caregiver(client, people):
+    from app.cli import set_active
+    ana, _, sam, _ = people
+    saved = client.post("/entries", json=entry(), headers=sam.auth).json()
+    set_active(ana.email, False)
+    assert client.get("/entries", headers=sam.auth).json() == []
+    assert client.put(f"/entries/{saved['id']}", json=entry(), headers=sam.auth).status_code == 404
+    assert client.post("/entries", json=entry(patientId=ana.id), headers=sam.auth).status_code == 404
+
+
 def test_caregiver_reads_are_logged(client, db, people):
     ana, _, sam, _ = people
     client.get("/entries", headers=sam.auth)
