@@ -11,13 +11,14 @@ const DEMO_SCHEDULE: readonly (readonly [string, number, number, boolean])[] = [
 ];
 
 /** Builds the demo reminders for one day, e.g. "2026-10-12". Confirmed ones are passed in. */
-function remindersFor(day: string, confirmed: ReadonlySet<string>): Reminder[] {
+function remindersFor(day: string, confirmed: ReadonlySet<string>, skipped: ReadonlySet<string>): Reminder[] {
   const [year, month, date] = day.split('-').map(Number);
   return DEMO_SCHEDULE.map(([medicineName, hour, minute, acknowledged], index) => ({
     id: `${day}-${index}`,
     medicineName,
     scheduledAt: new Date(year, month - 1, date, hour, minute).toISOString(),
     acknowledged: acknowledged || confirmed.has(`${day}-${index}`),
+    skipped: skipped.has(`${day}-${index}`),
   }));
 }
 
@@ -29,12 +30,13 @@ function remindersFor(day: string, confirmed: ReadonlySet<string>): Reminder[] {
 export class DemoReminderService implements IReminderService {
   /** Reminders the person has confirmed since the app started. Lost on reload, like all demo data. */
   private readonly confirmed = new Set<string>();
+  private readonly skipped = new Set<string>();
 
   constructor(private readonly latencyMs = 300) {}
 
   async listForDay(userId: string, day: string): Promise<readonly Reminder[]> {
     if (this.latencyMs > 0) await new Promise((resolve) => setTimeout(resolve, this.latencyMs));
-    return userId === DEMO_PATIENT_ID ? remindersFor(day, this.confirmed) : [];
+    return userId === DEMO_PATIENT_ID ? remindersFor(day, this.confirmed, this.skipped) : [];
   }
 
   async acknowledge(userId: string, reminderId: string): Promise<void> {
@@ -42,5 +44,11 @@ export class DemoReminderService implements IReminderService {
     // Only the demo patient owns reminders, so nobody else can confirm one.
     if (userId !== DEMO_PATIENT_ID) throw new Error('Reminder not found.');
     this.confirmed.add(reminderId);
+  }
+
+  async skip(userId: string, reminderId: string): Promise<void> {
+    if (this.latencyMs > 0) await new Promise((resolve) => setTimeout(resolve, this.latencyMs));
+    if (userId !== DEMO_PATIENT_ID) throw new Error('Reminder not found.');
+    this.skipped.add(reminderId);
   }
 }

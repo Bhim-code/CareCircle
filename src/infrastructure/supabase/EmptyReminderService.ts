@@ -17,4 +17,8 @@ export class EmptyReminderService implements IReminderService {
     // There are no reminders to confirm yet, so this should never be called.
     throw new Error('Reminders are not available yet.');
   }
+
+  async skip(_userId: string, _reminderId: string): Promise<void> {
+    throw new Error('Reminders are not available yet.');
+  }
 }

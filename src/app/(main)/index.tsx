@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { firstName, greetingFor } from '@/application/greeting';
 import { formatDate, formatTime, summarizeToday } from '@/application/reminders';
 import { AppText } from '@/presentation/components/AppText';
+import { AlarmPermissionNotice } from '@/presentation/components/AlarmPermissionNotice';
 import { Can } from '@/presentation/components/Can';
 import { ShortcutTile } from '@/presentation/components/ShortcutTile';
 import { StatusPill } from '@/presentation/components/StatusPill';
@@ -69,6 +70,7 @@ export default function HomeScreen() {
       </View>
 
       <View style={[styles.column, styles.body]}>
+        {isPatient ? <AlarmPermissionNotice /> : null}
         <View style={styles.summary}>
           <AppText variant="label" color={colors.inkSoft}>
             {isPatient ? "Today's reminders" : 'People you care for'}
@@ -83,6 +85,7 @@ export default function HomeScreen() {
           {isPatient && status === 'ready' && today.total > 0 ? (
             <AppText variant="caption" color={colors.inkSoft} style={styles.counts}>
               {today.acknowledged} taken · {today.remaining} to go · {today.missed} missed
+              {today.skipped > 0 ? ` · ${today.skipped} skipped` : ''}
             </AppText>
           ) : null}
           <View style={styles.summaryNote}>

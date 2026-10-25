@@ -49,5 +49,21 @@ export function useReminders(service: IReminderService, userId: string, day: str
     [service, userId],
   );
 
-  return { status, reminders, retry, acknowledge };
+  /** Records that the person skipped one dose. Returns false if it could not be saved. */
+  const skip = useCallback(
+    async (reminderId: string): Promise<boolean> => {
+      try {
+        await service.skip(userId, reminderId);
+      } catch {
+        return false;
+      }
+      setReminders((current) =>
+        current.map((item) => (item.id === reminderId ? { ...item, skipped: true } : item)),
+      );
+      return true;
+    },
+    [service, userId],
+  );
+
+  return { status, reminders, retry, acknowledge, skip };
 }

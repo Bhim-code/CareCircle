@@ -10,6 +10,7 @@ const LOOK: Record<ReminderStatus, { background: string; text: string }> = {
   upcoming: { background: colors.tint, text: colors.harbor },
   due: { background: colors.amberTint, text: colors.amber },
   acknowledged: { background: colors.successTint, text: colors.success },
+  skipped: { background: colors.tint, text: colors.inkSoft },
   missed: { background: colors.dangerTint, text: colors.danger },
 };
 

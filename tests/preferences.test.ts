@@ -67,3 +67,27 @@ describe('MemoryPreferencesStore', () => {
     assert.equal((await store.load('u2')).largerText, false);
   });
 });
+
+describe('alarm settings', () => {
+  it('start with sound, vibration and a 10 minute snooze', () => {
+    assert.equal(DEFAULT_PREFERENCES.alarmSound, true);
+    assert.equal(DEFAULT_PREFERENCES.alarmVibration, true);
+    assert.equal(DEFAULT_PREFERENCES.snoozeMinutes, 10);
+  });
+
+  it('keep a valid snooze length and reject any other number', () => {
+    assert.equal(normalizePreferences({ snoozeMinutes: 15 }).snoozeMinutes, 15);
+    assert.equal(normalizePreferences({ snoozeMinutes: 7 }).snoozeMinutes, 10);
+    assert.equal(normalizePreferences({ snoozeMinutes: '5' }).snoozeMinutes, 10);
+    assert.equal(normalizePreferences({ snoozeMinutes: -1 }).snoozeMinutes, 10);
+  });
+
+  it('load settings saved before alarms existed', () => {
+    const old = { largerText: true, reminderNotifications: false, missedDoseEmail: true, missedDoseCall: false };
+    const result = normalizePreferences(old);
+    assert.equal(result.largerText, true);
+    assert.equal(result.reminderNotifications, false);
+    assert.equal(result.alarmSound, true);
+    assert.equal(result.snoozeMinutes, 10);
+  });
+});

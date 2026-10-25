@@ -1,13 +1,19 @@
 import type { Reminder, ReminderStatus } from '../domain/entities/Reminder';
+import { missedAfterMinutes } from './alarmPlan';
 
-/** A reminder counts as "due" for this long after its time. After that it is missed. */
-export const DUE_WINDOW_MINUTES = 60;
+/**
+ * A reminder counts as "due" until the last alarm ring has gone unanswered
+ * (the dose time, then 5 and 10 minutes later, plus a few minutes to react).
+ * After that it is missed. It can still be confirmed later.
+ */
+export const DUE_WINDOW_MINUTES = missedAfterMinutes();
 
 const MINUTE = 60 * 1000;
 
 /** upcoming -> due -> missed, unless the person has acknowledged it. */
 export function reminderStatus(reminder: Reminder, now: Date): ReminderStatus {
   if (reminder.acknowledged) return 'acknowledged';
+  if (reminder.skipped) return 'skipped';
   const minutesLate = (now.getTime() - new Date(reminder.scheduledAt).getTime()) / MINUTE;
   if (minutesLate < 0) return 'upcoming';
   if (minutesLate <= DUE_WINDOW_MINUTES) return 'due';
@@ -17,6 +23,7 @@ export function reminderStatus(reminder: Reminder, now: Date): ReminderStatus {
 export interface TodaySummary {
   readonly total: number;
   readonly acknowledged: number;
+  readonly skipped: number;
   readonly missed: number;
   /** Still to come or due now. */
   readonly remaining: number;
@@ -34,6 +41,7 @@ export function summarizeToday(reminders: readonly Reminder[], now: Date): Today
   return {
     total: reminders.length,
     acknowledged: withStatus.filter((item) => item.status === 'acknowledged').length,
+    skipped: withStatus.filter((item) => item.status === 'skipped').length,
     missed: withStatus.filter((item) => item.status === 'missed').length,
     remaining: open.length,
     next: open[0] ?? null,
@@ -71,6 +79,7 @@ export const STATUS_LABEL: Record<ReminderStatus, string> = {
   upcoming: 'Upcoming',
   due: 'Due now',
   acknowledged: 'Taken',
+  skipped: 'Skipped',
   missed: 'Missed',
 };
 
@@ -84,6 +93,7 @@ export const STATUS_HELP: Record<ReminderStatus, string> = {
   upcoming: 'It is not time for this medicine yet.',
   due: 'It is time to take this medicine. Press the button once you have taken it.',
   acknowledged: 'You confirmed that you took this medicine.',
+  skipped: 'You chose to skip this dose.',
   missed: 'This reminder was not confirmed. If you did take it, you can still tell us.',
 };
 
