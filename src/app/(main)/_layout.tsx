@@ -3,7 +3,8 @@ import { Tabs } from 'expo-router';
 import React, { useState } from 'react';
 import type { ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { createPreferencesStore, createRecordEntryService, createReminderService } from '@/container';
+import { createAlarmScheduler, createPreferencesStore, createRecordEntryService, createReminderService } from '@/container';
+import { AlarmProvider } from '@/presentation/providers/AlarmProvider';
 import { PreferencesProvider } from '@/presentation/providers/PreferencesProvider';
 import { RecordEntriesProvider } from '@/presentation/providers/RecordEntriesProvider';
 import { RemindersProvider } from '@/presentation/providers/RemindersProvider';
@@ -26,12 +27,14 @@ export default function MainLayout() {
   // Settings belong to the signed-in person, so they are only loaded in this part of the app.
   const [preferencesStore] = useState(createPreferencesStore);
   const [reminderService] = useState(createReminderService);
+  const [alarmScheduler] = useState(createAlarmScheduler);
   const [entryService] = useState(createRecordEntryService);
   const insets = useSafeAreaInsets();
 
   return (
     <PreferencesProvider store={preferencesStore}>
       <RemindersProvider service={reminderService}>
+      <AlarmProvider scheduler={alarmScheduler} reminderService={reminderService}>
       <RecordEntriesProvider service={entryService}>
       <Tabs
         screenOptions={{
@@ -53,9 +56,12 @@ export default function MainLayout() {
         <Tabs.Screen name="index" options={tabOptions('Home', 'home-outline', 'home')} />
         <Tabs.Screen name="medications" options={tabOptions('Medications', 'medkit-outline', 'medkit')} />
         <Tabs.Screen name="records" options={tabOptions('Records', 'document-text-outline', 'document-text', 'Health Records')} />
+        {/* The alarm screen is opened by an alarm, not from the tab bar. */}
+        <Tabs.Screen name="alarm" options={{ href: null, tabBarStyle: { display: 'none' } }} />
         <Tabs.Screen name="profile" options={tabOptions('Profile', 'person-outline', 'person')} />
       </Tabs>
       </RecordEntriesProvider>
+      </AlarmProvider>
       </RemindersProvider>
     </PreferencesProvider>
   );

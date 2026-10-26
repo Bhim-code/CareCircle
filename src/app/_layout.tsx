@@ -7,12 +7,6 @@ import { DevToolbar } from '@/presentation/components/DevToolbar';
 import { LoadingScreen } from '@/presentation/components/LoadingScreen';
 import { AuthProvider, useAuth } from '@/presentation/providers/AuthProvider';
 import { colors } from '@/presentation/theme/theme';
-import { RoleChoice } from '@/presentation/components/RoleChoice';
-import { isRole, type Role } from '@/domain/entities/Role';
-
-  const [role, setRole] = useState<Role | ''>('');
-  const [fieldErrors, setFieldErrors] = useState<FieldErrors<keyof SignUpValues>>({});
-
 
 export default function RootLayout() {
   // Build the concrete services once, here, and hand them down as interfaces.
@@ -36,8 +30,6 @@ export default function RootLayout() {
 }
 
 /** The single place that decides who may see which part of the app. */
-  <RoleChoice value={role} onChange={setRole} error={fieldErrors.role} />
-
 function RootNavigator() {
   const { status } = useAuth();
 
@@ -46,8 +38,6 @@ function RootNavigator() {
   const signedIn = status === 'signedIn';
 
   return (
-
-
     <Stack
       screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.mist } }}
     >

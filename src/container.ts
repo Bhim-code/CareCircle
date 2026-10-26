@@ -1,4 +1,6 @@
 import { env, isSupabaseConfigured } from './config/env';
+import { Platform } from 'react-native';
+import type { IAlarmScheduler } from './domain/services/IAlarmScheduler';
 import type { IAuthService } from './domain/services/IAuthService';
 import type { IDevControls } from './domain/services/IDevControls';
 import type { IHealthRecordService } from './domain/services/IHealthRecordService';
@@ -10,6 +12,8 @@ import { DEMO_ACCOUNTS, DemoAuthService, type DemoAccount } from './infrastructu
 import { DemoHealthRecordService } from './infrastructure/demo/DemoHealthRecordService';
 import { DemoRecordEntryService } from './infrastructure/demo/DemoRecordEntryService';
 import { DemoReminderService } from './infrastructure/demo/DemoReminderService';
+import { NotifyKitAlarmScheduler } from './infrastructure/notifications/NotifyKitAlarmScheduler';
+import { NoopAlarmScheduler } from './infrastructure/notifications/NoopAlarmScheduler';
 import { AsyncPreferencesStore } from './infrastructure/storage/AsyncPreferencesStore';
 import { AsyncSessionStorage } from './infrastructure/storage/AsyncSessionStorage';
 import { EmptyRecordEntryService } from './infrastructure/supabase/EmptyRecordEntryService';
@@ -107,4 +111,12 @@ export function createHealthRecordService(): IHealthRecordService {
  */
 export function createRecordEntryService(): IRecordEntryService {
   return shouldUseDemo() ? new DemoRecordEntryService() : new EmptyRecordEntryService();
+}
+
+/**
+ * Alarms are set on the phone itself. The web has no such thing, so it gets a
+ * scheduler that does nothing.
+ */
+export function createAlarmScheduler(): IAlarmScheduler {
+  return Platform.OS === 'web' ? new NoopAlarmScheduler() : new NotifyKitAlarmScheduler();
 }

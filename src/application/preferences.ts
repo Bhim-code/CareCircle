@@ -1,5 +1,6 @@
 import {
   DEFAULT_PREFERENCES,
+  SNOOZE_CHOICES,
   type UserPreferences,
 } from '../domain/entities/UserPreferences';
 
@@ -15,12 +16,20 @@ export function preferencesKey(userId: string): string {
 export function normalizePreferences(raw: unknown): UserPreferences {
   if (typeof raw !== 'object' || raw === null) return DEFAULT_PREFERENCES;
   const data = raw as Record<string, unknown>;
-  const pick = (field: keyof UserPreferences): boolean =>
+  const pick = (
+    field: Exclude<keyof UserPreferences, 'snoozeMinutes'>,
+  ): boolean =>
     typeof data[field] === 'boolean' ? (data[field] as boolean) : DEFAULT_PREFERENCES[field];
+  const snooze = (SNOOZE_CHOICES as readonly unknown[]).includes(data.snoozeMinutes)
+    ? (data.snoozeMinutes as number)
+    : DEFAULT_PREFERENCES.snoozeMinutes;
 
   return {
     largerText: pick('largerText'),
     reminderNotifications: pick('reminderNotifications'),
+    alarmSound: pick('alarmSound'),
+    alarmVibration: pick('alarmVibration'),
+    snoozeMinutes: snooze,
     missedDoseEmail: pick('missedDoseEmail'),
     missedDoseCall: pick('missedDoseCall'),
   };

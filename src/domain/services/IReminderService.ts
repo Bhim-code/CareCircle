@@ -15,4 +15,7 @@ export interface IReminderService {
    * when the person presses the button, never automatically.
    */
   acknowledge(userId: string, reminderId: string): Promise<void>;
+
+  /** Records that the person chose to skip this dose. Called only when they press "Skip". */
+  skip(userId: string, reminderId: string): Promise<void>;
 }

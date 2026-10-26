@@ -26,13 +26,25 @@ describe('reminderStatus', () => {
     assert.equal(reminderStatus(reminder('a', at(13)), at(12, 59)), 'upcoming');
   });
 
-  it('is due from the scheduled time for one hour', () => {
+  it('is due from the scheduled time until the alarm has stopped and a few minutes have passed', () => {
+    // The alarm rings 2 minutes from 13:00, then 3 minutes to react.
     assert.equal(reminderStatus(reminder('a', at(13)), at(13)), 'due');
-    assert.equal(reminderStatus(reminder('a', at(13)), at(14)), 'due');
+    assert.equal(reminderStatus(reminder('a', at(13)), at(13, 5)), 'due');
   });
 
-  it('is missed after the hour has passed', () => {
-    assert.equal(reminderStatus(reminder('a', at(13)), at(14, 1)), 'missed');
+  it('is missed once the alarm has gone unanswered', () => {
+    assert.equal(reminderStatus(reminder('a', at(13)), at(13, 6)), 'missed');
+  });
+
+  it('is skipped only when the person chose to skip, at any time', () => {
+    const skipped = { ...reminder('a', at(13)), skipped: true };
+    assert.equal(reminderStatus(skipped, at(9)), 'skipped');
+    assert.equal(reminderStatus(skipped, at(20)), 'skipped');
+  });
+
+  it('a taken dose stays taken even if it was also marked skipped', () => {
+    const both = { ...reminder('a', at(13), true), skipped: true };
+    assert.equal(reminderStatus(both, at(14)), 'acknowledged');
   });
 
   it('is acknowledged only when the person confirmed it, at any time', () => {
@@ -50,6 +62,7 @@ describe('summarizeToday', () => {
     assert.deepEqual(summarizeToday([], at(10)), {
       total: 0,
       acknowledged: 0,
+      skipped: 0,
       missed: 0,
       remaining: 0,
       next: null,
@@ -73,7 +86,7 @@ describe('summarizeToday', () => {
   });
 
   it('shows a reminder that is due now as the next one', () => {
-    const summary = summarizeToday([reminder('now', at(15)), reminder('later', at(18))], at(15, 10));
+    const summary = summarizeToday([reminder('now', at(15)), reminder('later', at(18))], at(15, 4));
     assert.equal(summary.next?.reminder.id, 'now');
     assert.equal(summary.next?.status, 'due');
   });
@@ -171,5 +184,32 @@ describe('sortByTime', () => {
     const list = [reminder('b', at(18)), reminder('a', at(8))];
     assert.deepEqual(sortByTime(list).map((item) => item.id), ['a', 'b']);
     assert.deepEqual(list.map((item) => item.id), ['b', 'a']);
+  });
+});
+
+describe('skipping a dose', () => {
+  it('is saved by the demo service for the demo patient', async () => {
+    const service = new DemoReminderService(0);
+    await service.skip(DEMO_PATIENT_ID, '2026-10-12-1');
+    const list = await service.listForDay(DEMO_PATIENT_ID, '2026-10-12');
+    assert.equal(list.find((item) => item.id === '2026-10-12-1')?.skipped, true);
+    assert.equal(list.find((item) => item.id === '2026-10-12-2')?.skipped, false);
+  });
+
+  it('is refused for anyone else, so nobody can change another person\'s dose', async () => {
+    const service = new DemoReminderService(0);
+    await assert.rejects(service.skip('someone-else', '2026-10-12-1'));
+  });
+
+  it('is refused by the placeholder backend', async () => {
+    await assert.rejects(new EmptyReminderService().skip('u', 'r'));
+  });
+
+  it('does not count as missed or remaining in the day summary', () => {
+    const skipped = { ...reminder('s', at(10)), skipped: true };
+    const summary = summarizeToday([skipped], at(15));
+    assert.equal(summary.skipped, 1);
+    assert.equal(summary.missed, 0);
+    assert.equal(summary.remaining, 0);
   });
 });
