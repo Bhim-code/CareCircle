@@ -60,7 +60,7 @@ or `DATABASE_URL` in `.env` is wrong.
 pytest
 ```
 
-131 tests run against a real PostgreSQL database built from the migrations, in about
+148 tests run against a real PostgreSQL database built from the migrations, in about
 20 seconds. They always use `TEST_DATABASE_URL` (default `carecircle_test`), never your
 data. GitHub Actions runs them on every push (`.github/workflows/backend.yml`).
 
@@ -77,12 +77,13 @@ python -m app.cli set-active --email someone@example.com --inactive
 
 Admin and supervisor accounts can only be made with `app.cli` (never by sign-up).
 
-**Companies.** A supervisor belongs to one company and sees all of that company's patients
-and caregivers (and their records), and nothing from any other company. A supervisor can
-switch their company's caregivers on or off (switching off signs them out at once). An admin is
-global. Admins put patients and caregivers into a company from the admin panel or with
-`set-company`. The seed creates Harbour Home Care (supervisor `sue@`) and Northside Care
-(supervisor `nina@`), plus `al@` as admin. All are `@demo.carecircle.test`, password `demo1234`.
+**Roles and permissions.** People who sign up wait with role "pending" until a
+supervisor gives them a role in the admin panel (People page). Supervisors can create,
+edit and turn off people, assign roles, give extra permissions, and create roles with their
+own permissions (Roles & permissions page). Nobody can change their own role or permissions,
+and the last supervisor cannot be removed. The seed creates one company, Harbour Home Care:
+`sue@` (supervisor), `ana@`, `bob@` (patients), `sam@` (caregiver), `pat@` and `carl@`
+(waiting for a role), and `al@` (admin). All are `@demo.carecircle.test`, password `demo1234`.
 
 ## Background jobs
 
@@ -113,6 +114,7 @@ The full list with request and response shapes is at http://localhost:8000/docs.
 | Care links | `POST /care-links/invitations`, `GET /care-links`, `POST /care-links/invitations/{id}/accept`, `DELETE /care-links/{id}` |
 | Medicines | `GET/POST /medicines`, `DELETE /medicines/{id}`, `GET /reminders?day=`, `POST /reminders/{id}/acknowledge` |
 | Records | `GET /health-records`, `GET/POST /entries`, `PUT /entries/{id}`, `POST /entries/photo`, `GET /files/photos/{id}` |
+| People and roles | `GET /admin/me`, `GET/POST /admin/users`, `GET/PATCH/DELETE /admin/users/{id}` (profile; delete = turn off), `PUT /admin/users/{id}/role`, `PUT /admin/users/{id}/permissions`, `POST/DELETE /admin/users/{id}/photo`, `GET /admin/permissions`, `GET/POST /admin/roles`, `PATCH/DELETE /admin/roles/{id}` |
 | Admin panel | `GET /admin/overview`, `/admin/users`, `PATCH /admin/users/{id}` (active, company), `/admin/patients/{id}` (+ `/reminders`, `/documents`, `/entries`, `.csv` exports), `/admin/caregivers/{id}`, `GET/POST /admin/organizations`, `/admin/access-log`. Supervisors see their own company only. |
 
 Where the API adds to or differs from `api-contract.md`: **`docs/CONTRACT-NOTES.md`**

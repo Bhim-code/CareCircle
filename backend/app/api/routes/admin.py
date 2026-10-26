@@ -32,6 +32,8 @@ from app.db.models import (
     Medicine,
     Organization,
     RecordEntry,
+    Role,
+    UserProfile,
     Reminder,
     User,
 )
@@ -51,12 +53,11 @@ from app.schemas.admin import (
     Page,
     PatientDetailOut,
     RemindersToday,
-    UserUpdateIn,
 )
 from app.schemas.common import PersonOut, PersonWithEmailOut
 from app.schemas.entries import EntryOut, Kind
 from app.services import access, photos, stats
-from app.services.auth import end_all_sessions
+from app.services.permissions import has_permission
 from app.services.reminders import local_day_bounds
 
 router = APIRouter(prefix="/admin", tags=["admin panel"])
@@ -66,12 +67,25 @@ PageSize = Annotated[int, Query(ge=1, le=200, alias="pageSize")]
 
 
 def staff(me: CurrentUser = Depends(current_user), db: Session = Depends(get_db)) -> CurrentUser:
-    """Admin or supervisor. Anyone else signed in is refused, and the attempt is logged."""
-    if me.role not in ("admin", "supervisor"):
+    """Admin or supervisor with 'panel.access'. Anyone else is refused, and it is logged."""
+    if me.role not in ("admin", "supervisor") or not has_permission(db, me.user, "panel.access"):
         access.log_access(db, me.user, None, "admin.denied", outcome="denied")
         db.commit()
         raise ApiError(403)
     return me
+
+
+def need(code: str):
+    """Dependency: staff who also hold this permission (set per role in the panel)."""
+
+    def check(me: CurrentUser = Depends(staff), db: Session = Depends(get_db)) -> CurrentUser:
+        if not has_permission(db, me.user, code):
+            access.log_access(db, me.user, None, f"denied:{code}"[:60], outcome="denied")
+            db.commit()
+            raise ApiError(403, f"You need the '{code}' permission for this.", code="missing_permission")
+        return me
+
+    return check
 
 
 def admin(me: CurrentUser = Depends(staff), db: Session = Depends(get_db)) -> CurrentUser:
@@ -113,11 +127,18 @@ def _users_out(db: Session, users: list[User]) -> list[AdminUserOut]:
     org_ids = {u.organization_id for u in users if u.organization_id}
     names = dict(db.execute(select(Organization.id, Organization.name)
                             .where(Organization.id.in_(org_ids))).all()) if org_ids else {}
+    role_names = dict(db.execute(select(Role.id, Role.name)).all())
+    ids = [u.id for u in users]
+    photo_keys = dict(db.execute(select(UserProfile.user_id, UserProfile.photo_key).where(
+        UserProfile.user_id.in_(ids), UserProfile.photo_key.is_not(None))).all()) if ids else {}
     out = []
     for u in users:
         item = AdminUserOut.model_validate(u)
         if u.organization_id:
             item.company = CompanyRef(id=u.organization_id, name=names[u.organization_id])
+        item.role_name = role_names.get(u.role_id)
+        key = photo_keys.get(u.id)
+        item.photo_uri = photos.signed_profile_uri(u.id, key) if key else None
         out.append(item)
     return out
 
@@ -180,7 +201,7 @@ def overview(timezone: Annotated[str | None, Query(max_length=64)] = None,
 @router.get("/users", response_model=Page[AdminUserOut])
 def list_users(role: str | None = None, q: Annotated[str | None, Query(max_length=100)] = None,
                active: bool | None = None, page: PageNo = 1, page_size: PageSize = 25,
-               me: CurrentUser = Depends(staff), db: Session = Depends(get_db)) -> Page[AdminUserOut]:
+               me: CurrentUser = Depends(need("people.view")), db: Session = Depends(get_db)) -> Page[AdminUserOut]:
     """Search by name or email. Filter by role and active state.
     A supervisor sees only the people in their own company."""
     query = _scope(select(User), me)
@@ -199,58 +220,10 @@ def list_users(role: str | None = None, q: Annotated[str | None, Query(max_lengt
     return Page(items=_users_out(db, list(rows)), total=total, page=page, page_size=page_size)
 
 
-@router.patch("/users/{user_id}", response_model=AdminUserOut)
-def update_user(user_id: uuid.UUID, body: UserUpdateIn, me: CurrentUser = Depends(staff),
-                db: Session = Depends(get_db)) -> AdminUserOut:
-    """Turn an account off (signs it out everywhere at once) or back on, and/or put a
-    person into a company (organizationId, null to remove).
-
-    - Admin: any account except their own; companies too.
-    - Supervisor: only isActive, and only for caregivers of their own company.
-    """
-    user = db.get(User, user_id)
-    if user is None:
-        raise ApiError(404)
-    sent = body.model_fields_set
-    if me.role != "admin":
-        if not _in_scope(me, user):
-            access.log_access(db, me.user, user.id, "user.change", outcome="denied")
-            db.commit()
-            raise ApiError(404)
-        if user.role != "caregiver" or sent - {"is_active"}:
-            access.log_access(db, me.user, user.id, "user.change", outcome="denied")
-            db.commit()
-            raise ApiError(403, "Supervisors can only switch their company's caregivers on or off.")
-    if "organization_id" in sent:
-        if user.role == "admin":
-            raise ApiError(422, "Admins are global and cannot belong to a company.",
-                           fields={"organizationId": "Not for admins."})
-        if body.organization_id is None and user.role == "supervisor":
-            raise ApiError(422, "A supervisor must belong to a company.",
-                           fields={"organizationId": "Choose a company."})
-        if body.organization_id is not None and db.get(Organization, body.organization_id) is None:
-            raise ApiError(422, fields={"organizationId": "No such company."})
-        if user.organization_id != body.organization_id:
-            user.organization_id = body.organization_id
-            if user.role == "supervisor":
-                end_all_sessions(db, user.id)  # their view changes: make them sign in again
-            access.log_access(db, me.user, user.id, "user.company")
-    if "is_active" in sent and body.is_active is not None:
-        if user.id == me.id and not body.is_active:
-            raise ApiError(422, "You cannot turn off your own account.", fields={"isActive": "Not for yourself."})
-        if user.is_active != body.is_active:
-            user.is_active = body.is_active
-            if not body.is_active:
-                end_all_sessions(db, user.id)
-            access.log_access(db, me.user, user.id, "user.activate" if body.is_active else "user.deactivate")
-    db.commit()
-    return _users_out(db, [user])[0]
-
-
 # --- one caregiver -----------------------------------------------------------
 
 @router.get("/caregivers/{caregiver_id}", response_model=CaregiverDetailOut)
-def caregiver_detail(caregiver_id: uuid.UUID, me: CurrentUser = Depends(staff),
+def caregiver_detail(caregiver_id: uuid.UUID, me: CurrentUser = Depends(need("people.view")),
                      db: Session = Depends(get_db)) -> CaregiverDetailOut:
     """A caregiver of the viewer's company, and the clients they look after."""
     caregiver = db.get(User, caregiver_id)
@@ -318,7 +291,7 @@ def create_company(body: CompanyIn, me: CurrentUser = Depends(admin),
 # --- one patient -------------------------------------------------------------
 
 @router.get("/patients/{patient_id}", response_model=PatientDetailOut)
-def patient_detail(patient_id: uuid.UUID, me: CurrentUser = Depends(staff),
+def patient_detail(patient_id: uuid.UUID, me: CurrentUser = Depends(need("records.view")),
                    db: Session = Depends(get_db)) -> PatientDetailOut:
     patient = _patient(db, patient_id, me, "patient.view")
     caregivers = db.scalars(select(User).join(CareLink, CareLink.caregiver_id == User.id).where(
@@ -353,14 +326,14 @@ def _reminder_rows(db: Session, patient_id: uuid.UUID, start: date | None, end: 
 def patient_reminders(patient_id: uuid.UUID,
                       from_date: Annotated[date | None, Query(alias="from")] = None,
                       to_date: Annotated[date | None, Query(alias="to")] = None,
-                      me: CurrentUser = Depends(staff), db: Session = Depends(get_db)):
+                      me: CurrentUser = Depends(need("records.view")), db: Session = Depends(get_db)):
     """Newest first, at most 2000. Dates are UTC days."""
     _patient(db, patient_id, me, "reminders.view")
     return _reminder_rows(db, patient_id, from_date, to_date)
 
 
 @router.get("/patients/{patient_id}/documents", response_model=list[AdminDocumentOut])
-def patient_documents(patient_id: uuid.UUID, me: CurrentUser = Depends(staff),
+def patient_documents(patient_id: uuid.UUID, me: CurrentUser = Depends(need("records.view")),
                       db: Session = Depends(get_db)):
     _patient(db, patient_id, me, "documents.view")
     return list(db.scalars(select(HealthDocument).where(HealthDocument.patient_id == patient_id)
@@ -398,7 +371,7 @@ def _entry_rows(db: Session, patient_id: uuid.UUID, kind: str | None, start: dat
 def patient_entries(patient_id: uuid.UUID, kind: Kind | None = None,
                     from_date: Annotated[date | None, Query(alias="from")] = None,
                     to_date: Annotated[date | None, Query(alias="to")] = None,
-                    me: CurrentUser = Depends(staff), db: Session = Depends(get_db)):
+                    me: CurrentUser = Depends(need("records.view")), db: Session = Depends(get_db)):
     """Written records, newest first, at most 2000. Filter by kind and UTC dates."""
     _patient(db, patient_id, me, "entries.view")
     return _entry_rows(db, patient_id, kind, from_date, to_date)
@@ -429,7 +402,7 @@ def _csv(filename: str, header: list[str], rows: list[list]) -> StreamingRespons
 def export_entries(patient_id: uuid.UUID, kind: Kind | None = None,
                    from_date: Annotated[date | None, Query(alias="from")] = None,
                    to_date: Annotated[date | None, Query(alias="to")] = None,
-                   me: CurrentUser = Depends(staff), db: Session = Depends(get_db)):
+                   me: CurrentUser = Depends(need("records.export")), db: Session = Depends(get_db)):
     _patient(db, patient_id, me, "entries.export")
     rows = _entry_rows(db, patient_id, kind, from_date, to_date)
     header = ["occurredAt", "kind", "title", "clientName", "notes", "severity", "mood", "medicineName",
@@ -447,7 +420,7 @@ def export_entries(patient_id: uuid.UUID, kind: Kind | None = None,
 def export_reminders(patient_id: uuid.UUID,
                      from_date: Annotated[date | None, Query(alias="from")] = None,
                      to_date: Annotated[date | None, Query(alias="to")] = None,
-                     me: CurrentUser = Depends(staff), db: Session = Depends(get_db)):
+                     me: CurrentUser = Depends(need("records.export")), db: Session = Depends(get_db)):
     _patient(db, patient_id, me, "reminders.export")
     rows = _reminder_rows(db, patient_id, from_date, to_date)
     data = [[r.scheduled_at.isoformat(), r.medicine_name, r.status,
@@ -461,7 +434,7 @@ def export_reminders(patient_id: uuid.UUID,
 def access_log(patient_id: Annotated[uuid.UUID | None, Query(alias="patientId")] = None,
                viewer_id: Annotated[uuid.UUID | None, Query(alias="viewerId")] = None,
                outcome: str | None = None, page: PageNo = 1, page_size: PageSize = 50,
-               me: CurrentUser = Depends(staff), db: Session = Depends(get_db)) -> Page[AccessLogOut]:
+               me: CurrentUser = Depends(need("audit.view")), db: Session = Depends(get_db)) -> Page[AccessLogOut]:
     """A supervisor sees lines about their company's people, or made by their company's people."""
     viewer, patient = aliased(User), aliased(User)
     query = (select(AccessLog, viewer, patient).join(viewer, viewer.id == AccessLog.viewer_id)

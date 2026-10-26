@@ -13,11 +13,9 @@ JavaScript, with no framework and nothing to build to run it.
    ```
 
 3. Open http://localhost:5500 and sign in (password `demo1234`):
-   - `sue@demo.carecircle.test`: supervisor of Harbour Home Care (sees only that company,
-     can switch its caregivers on or off)
-   - `nina@demo.carecircle.test`: supervisor of Northside Care
-   - `al@demo.carecircle.test`: admin (every company; creates companies, moves people,
-     turns accounts off and on)
+   - `sue@demo.carecircle.test`: supervisor of Harbour Home Care, with full control of it
+   - `al@demo.carecircle.test`: admin (every company)
+   Two demo people (`pat@`, `carl@`) are waiting for a role.
 
 Patients and caregivers are refused; they use the app. The port must match
 `CORS_ORIGINS` in `backend/.env` (5500 by default). To point at another API, edit
@@ -27,6 +25,9 @@ Patients and caregivers are refused; they use the app. The port must match
 
 | Page | |
 |---|---|
+| People | Everyone in the company, with tabs (Waiting for a role, Patients, Caregivers, Supervisors). Each row: photo, role picker, on/off switch, Profile, Edit, Delete. "Add person" creates an account and emails a set-password link. |
+| Profile | Photo, details (phone, date of birth, address, emergency contact, notes), role, permissions (from the role, plus extra ones for this person), history of every change |
+| Roles & permissions | A grid of roles × permissions; tick to change what a role can do; create roles (e.g. "Night nurse") |
 | Overview | 7-day adherence circle, today's doses (taken, due, missed, upcoming), totals, for your company (supervisor) or all companies (admin) |
 | Patients | Search, then open a patient: details, caregivers, medicines, adherence |
 | Caregivers | Every caregiver of the company, each with an on/off switch; open one to see the patients they look after |

@@ -106,9 +106,9 @@ def test_only_admin_creates_companies_and_assigns_people(client, two_companies):
     own = client.patch(f"/admin/users/{w['sam'].id}", json={"organizationId": bay}, headers=w["sue"].auth)
     assert own.status_code == 403
     moved = client.patch(f"/admin/users/{w['loner'].id}", json={"organizationId": bay}, headers=w["adm"].auth)
-    assert moved.status_code == 200 and moved.json()["company"]["name"] == "Bay Care"
+    assert moved.status_code == 200 and moved.json()["person"]["company"]["name"] == "Bay Care"
     removed = client.patch(f"/admin/users/{w['loner'].id}", json={"organizationId": None}, headers=w["adm"].auth)
-    assert removed.json()["company"] is None
+    assert removed.json()["person"]["company"] is None
 
     bad = client.patch(f"/admin/users/{w['adm'].id}", json={"organizationId": bay}, headers=w["adm"].auth)
     assert bad.status_code == 422
@@ -149,13 +149,13 @@ def test_supervisor_cannot_exist_without_a_company(client):
 def test_supervisor_switches_own_caregiver_off_and_on(client, db, two_companies):
     w = two_companies
     off = client.patch(f"/admin/users/{w['sam'].id}", json={"isActive": False}, headers=w["sue"].auth)
-    assert off.status_code == 200 and off.json()["isActive"] is False
+    assert off.status_code == 200 and off.json()["person"]["isActive"] is False
     # Signed out at once, and cannot sign in.
     assert client.get("/me", headers=w["sam"].auth).status_code == 401
     assert client.post("/auth/sign-in", json={"email": w["sam"].email, "password": "correct-horse-1"}
                        ).status_code == 401
     on = client.patch(f"/admin/users/{w['sam'].id}", json={"isActive": True}, headers=w["sue"].auth)
-    assert on.json()["isActive"] is True
+    assert on.json()["person"]["isActive"] is True
     assert client.post("/auth/sign-in", json={"email": w["sam"].email, "password": "correct-horse-1"}
                        ).status_code == 200
     actions = db.scalars(select(AccessLog.action).where(AccessLog.viewer_id == uuid.UUID(w["sue"].id),
@@ -163,16 +163,17 @@ def test_supervisor_switches_own_caregiver_off_and_on(client, db, two_companies)
     assert actions == ["user.deactivate", "user.activate"]
 
 
-def test_supervisor_cannot_switch_others(client, db, two_companies):
+def test_supervisor_cannot_switch_other_companies_or_self(client, db, two_companies):
     w = two_companies
     sue = w["sue"].auth
     # Another company's caregiver: 404, and logged as refused.
     assert client.patch(f"/admin/users/{w['dan'].id}", json={"isActive": False}, headers=sue).status_code == 404
-    # Own company's patient, or another supervisor: 403.
-    assert client.patch(f"/admin/users/{w['ana'].id}", json={"isActive": False}, headers=sue).status_code == 403
+    # Another company's supervisor: 404 as well.
     assert client.patch(f"/admin/users/{w['nina'].id}", json={"isActive": False}, headers=sue).status_code == 404
+    # Herself: refused.
+    assert client.patch(f"/admin/users/{w['sue'].id}", json={"isActive": False}, headers=sue).status_code == 422
     assert client.get("/me", headers=w["dan"].auth).status_code == 200
-    assert client.get("/me", headers=w["ana"].auth).status_code == 200
+    assert client.get("/me", headers=w["nina"].auth).status_code == 200
     denied = db.scalars(select(AccessLog).where(AccessLog.viewer_id == uuid.UUID(w["sue"].id),
                                                 AccessLog.outcome == "denied")).all()
-    assert len(denied) == 3
+    assert len(denied) == 2

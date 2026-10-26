@@ -23,8 +23,9 @@ from app.db.models import EntryPhoto, RecordEntry, RecordEntryHistory, User
 from app.db.session import get_db
 from app.schemas.base import CamelModel
 from app.schemas.common import PersonOut
-from app.schemas.entries import ONLY_FOR, WRITABLE_KINDS, EntryIn, EntryOut, Kind
+from app.schemas.entries import ONLY_FOR, EntryIn, EntryOut, Kind
 from app.services import access, photos
+from app.services.permissions import has_permission
 
 router = APIRouter(tags=["written records"])
 files_router = APIRouter(tags=["files"])
@@ -64,9 +65,10 @@ def _check_kind_fields(body: EntryIn) -> None:
             raise ApiError(422, fields={_CAMEL[field]: f"Only used for {kind} records. Send null."})
 
 
-def _check_role_may_write(me: CurrentUser, kind: str) -> None:
-    if kind not in WRITABLE_KINDS.get(me.role, set()):
-        raise ApiError(403, f"A {me.role} cannot write {kind} records.")
+def _check_role_may_write(db: Session, me: CurrentUser, kind: str) -> None:
+    """Permission entries.write.<kind>, set per role (and per person) in the admin panel."""
+    if not has_permission(db, me.user, f"entries.write.{kind}"):
+        raise ApiError(403, f"You do not have permission to write {kind} records.")
 
 
 def _target_patient(db: Session, me: CurrentUser, requested: uuid.UUID | None) -> uuid.UUID:
@@ -159,7 +161,7 @@ def list_entries(
 @router.post("/entries", response_model=EntryOut, status_code=201)
 def create_entry(body: EntryIn, me: CurrentUser = Depends(patient_or_caregiver),
                  db: Session = Depends(get_db)) -> EntryOut:
-    _check_role_may_write(me, body.kind)
+    _check_role_may_write(db, me, body.kind)
     _check_kind_fields(body)
     patient_id = _target_patient(db, me, body.patient_id)
     entry = RecordEntry(**{f: getattr(body, f) for f in _FIELDS},
@@ -185,7 +187,7 @@ def edit_entry(entry_id: uuid.UUID, body: EntryIn, me: CurrentUser = Depends(pat
         raise ApiError(422, fields={"kind": "The kind of a record cannot be changed."})
     if body.patient_id not in (None, entry.patient_id):
         raise ApiError(422, fields={"patientId": "A record cannot be moved to another patient."})
-    _check_role_may_write(me, body.kind)
+    _check_role_may_write(db, me, body.kind)
     _check_kind_fields(body)
 
     old_photo = db.scalar(select(EntryPhoto.id).where(EntryPhoto.entry_id == entry.id))

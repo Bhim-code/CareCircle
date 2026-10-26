@@ -35,7 +35,22 @@ def sign_up(client: TestClient, name: str, role: str, email: str | None = None,
     response = client.post("/auth/sign-up", json={"name": name, "email": email, "password": PASSWORD,
                                                   "role": role, "timezone": timezone})
     assert response.status_code == 201, response.text
-    return _person(response.json())
+    person = _person(response.json())
+    give_role(person.email, role)  # what a supervisor would do; tokens stay valid
+    person.role = role
+    return person
+
+
+def give_role(email: str, kind: str) -> None:
+    """Test shortcut: give someone the built-in role of a kind, straight in the database."""
+    from sqlalchemy import text
+    from app.db.session import get_engine
+    with get_engine().begin() as connection:
+        connection.execute(text(
+            "UPDATE users SET role = CAST(:k AS varchar), requested_role = NULL, "
+            "role_id = (SELECT id FROM roles WHERE is_system AND kind = CAST(:k AS varchar)) "
+            "WHERE email = :e"),
+            {"k": kind, "e": email.lower()})
 
 
 def sign_in(client: TestClient, email: str, password: str = PASSWORD) -> Person:

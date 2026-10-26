@@ -9,6 +9,7 @@ from datetime import date, datetime
 
 from sqlalchemy import (
     ARRAY,
+    event,
     BigInteger,
     Boolean,
     CheckConstraint,
@@ -26,7 +27,10 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-ROLES = ("patient", "caregiver", "admin", "supervisor")
+# users.role is the KIND of the person's role (what the app treats them as), or
+# "pending" until a supervisor assigns a role. The role itself is users.role_id.
+ROLES = ("patient", "caregiver", "admin", "supervisor", "pending")
+ROLE_KINDS = ("patient", "caregiver", "supervisor", "admin")
 SELF_SIGN_UP_ROLES = ("patient", "caregiver")
 STAFF_ROLES = ("admin", "supervisor")
 LINK_STATUSES = ("pending", "active", "ended")
@@ -79,6 +83,63 @@ class Organization(Base):
     created_at: Mapped[datetime] = _created()
 
 
+# --- Roles and permissions (many-to-many) ------------------------------------
+
+class Permission(Base):
+    """One thing a person may do. The list is fixed in app/core/permissions.py."""
+
+    __tablename__ = "permissions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(60), nullable=False, unique=True)
+    description: Mapped[str] = mapped_column(String(200), nullable=False)
+
+
+class Role(Base):
+    """A named set of permissions. Its kind decides how the app treats the person."""
+
+    __tablename__ = "roles"
+    __table_args__ = (
+        CheckConstraint(_in("kind", ROLE_KINDS), name="roles_kind_valid"),
+        CheckConstraint("length(trim(name)) > 0", name="roles_name_not_blank"),
+        Index("roles_name_unique", text("lower(name)"), unique=True),
+        # Exactly one built-in role per kind: the default when someone is given that kind.
+        Index("roles_one_system_role_per_kind", "kind", unique=True, postgresql_where=text("is_system")),
+    )
+
+    id: Mapped[uuid.UUID] = _id()
+    name: Mapped[str] = mapped_column(String(60), nullable=False)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    description: Mapped[str] = mapped_column(String(200), nullable=False, server_default="")
+    is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    created_at: Mapped[datetime] = _created()
+
+
+class RolePermission(Base):
+    """Many-to-many: which permissions each role has."""
+
+    __tablename__ = "role_permissions"
+
+    role_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True)
+    permission_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("permissions.id", ondelete="CASCADE"), primary_key=True)
+
+
+class UserPermission(Base):
+    """Many-to-many: extra permissions given to one person, on top of their role's."""
+
+    __tablename__ = "user_permissions"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    permission_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("permissions.id", ondelete="CASCADE"), primary_key=True)
+    granted_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
+    granted_at: Mapped[datetime] = _created()
+
+
 # --- People and sign-in ------------------------------------------------------
 
 class User(Base):
@@ -92,6 +153,11 @@ class User(Base):
         CheckConstraint("role <> 'supervisor' OR organization_id IS NOT NULL OR NOT is_active",
                         name="users_supervisor_has_company"),
         CheckConstraint("role <> 'admin' OR organization_id IS NULL", name="users_admin_is_global"),
+        # Waiting for a role <=> no role assigned.
+        CheckConstraint("(role = 'pending') = (role_id IS NULL)", name="users_pending_has_no_role"),
+        CheckConstraint(f"requested_role IS NULL OR {_in('requested_role', SELF_SIGN_UP_ROLES)}",
+                        name="users_requested_role_valid"),
+        Index("users_role_id_idx", "role_id"),
         Index("users_organization_idx", "organization_id"),
     )
 
@@ -99,6 +165,10 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(EMAIL_LENGTH), nullable=False)
     name: Mapped[str] = mapped_column(String(SHORT_TEXT), nullable=False)
     role: Mapped[str] = mapped_column(String(20), nullable=False)
+    role_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("roles.id", ondelete="RESTRICT", name="users_role_id_fkey"))
+    # What the person asked for at sign-up (a hint for the supervisor; grants nothing).
+    requested_role: Mapped[str | None] = mapped_column(String(20))
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     # IANA name such as "America/St_Johns". Medicine times are in this zone.
@@ -110,6 +180,40 @@ class User(Base):
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False,
                                                  server_default=func.now(), onupdate=func.now())
+
+
+class UserProfile(Base):
+    """Details shown on the profile page. Personal data: staff with people.view only."""
+
+    __tablename__ = "user_profiles"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    phone: Mapped[str | None] = mapped_column(String(30))
+    date_of_birth: Mapped[date | None] = mapped_column(Date)
+    address: Mapped[str | None] = mapped_column(String(300))
+    emergency_contact_name: Mapped[str | None] = mapped_column(String(SHORT_TEXT))
+    emergency_contact_phone: Mapped[str | None] = mapped_column(String(30))
+    notes: Mapped[str | None] = mapped_column(String(LONG_TEXT))
+    photo_key: Mapped[str | None] = mapped_column(String(100), unique=True)
+    photo_type: Mapped[str | None] = mapped_column(String(20))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False,
+                                                 server_default=func.now(), onupdate=func.now())
+
+
+class AccountChange(Base):
+    """Every change to someone's account: role, permissions, on/off, details. Append-only."""
+
+    __tablename__ = "account_changes"
+    __table_args__ = (Index("account_changes_user_idx", "user_id", "at"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    user_id: Mapped[uuid.UUID] = _user_fk(ondelete="RESTRICT")
+    changed_by: Mapped[uuid.UUID | None] = _user_fk(nullable=True, ondelete="RESTRICT")
+    change: Mapped[str] = mapped_column(String(30), nullable=False)
+    before: Mapped[dict | None] = mapped_column(JSONB)
+    after: Mapped[dict | None] = mapped_column(JSONB)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
 class AuthSession(Base):
@@ -371,3 +475,11 @@ class AccessLog(Base):
     outcome: Mapped[str] = mapped_column(String(10), nullable=False, server_default="allowed")
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False,
                                          server_default=func.now())
+
+
+@event.listens_for(User, "before_insert")
+def _default_role_for_kind(_mapper, connection, user: User) -> None:
+    """Anyone created with a kind but no role (CLI, seed, tests) gets that kind's built-in role."""
+    if user.role_id is None and user.role and user.role != "pending":
+        user.role_id = connection.execute(
+            text("SELECT id FROM roles WHERE kind = :kind AND is_system"), {"kind": user.role}).scalar()

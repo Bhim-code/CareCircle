@@ -5,9 +5,10 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentUser, current_user, patient_only
 from app.core.security import utcnow
-from app.db.models import AccessLog, PushToken, User, UserPreferences
+from app.db.models import AccessLog, PushToken, Role, User, UserPreferences
+from app.services.permissions import effective_permissions
 from app.db.session import get_db
-from app.schemas.auth import MeUpdateIn, UserOut
+from app.schemas.auth import MeOut, MeUpdateIn, UserOut
 from app.schemas.base import CamelModel
 from app.schemas.common import PersonOut, UtcDateTime
 from app.schemas.me import PreferencesIO, PushTokenIn
@@ -15,9 +16,14 @@ from app.schemas.me import PreferencesIO, PushTokenIn
 router = APIRouter(prefix="/me", tags=["me"])
 
 
-@router.get("", response_model=UserOut)
-def get_me(me: CurrentUser = Depends(current_user)) -> UserOut:
-    return UserOut.model_validate(me.user)
+@router.get("", response_model=MeOut)
+def get_me(me: CurrentUser = Depends(current_user), db: Session = Depends(get_db)) -> MeOut:
+    """Who am I, my role, and what may I do. role "pending" = waiting for a supervisor."""
+    out = MeOut.model_validate(me.user)
+    role = db.get(Role, me.user.role_id) if me.user.role_id else None
+    out.role_name = role.name if role else None
+    out.permissions = sorted(effective_permissions(db, me.user))
+    return out
 
 
 @router.patch("", response_model=UserOut)

@@ -23,7 +23,7 @@ def test_sign_up_patient_returns_tokens_and_user(client):
         "name": " Ana Patient ", "email": "Ana@Test.example", "password": PASSWORD, "role": "patient"})
     assert response.status_code == 201
     body = response.json()
-    assert body["user"]["role"] == "patient"
+    assert body["user"]["role"] == "pending"  # waits for a supervisor to assign a role
     assert body["user"]["email"] == "ana@test.example"
     assert body["user"]["name"] == "Ana Patient"
     assert body["accessToken"] and body["refreshToken"] and body["expiresIn"] == 900
@@ -75,8 +75,11 @@ def test_me_needs_a_valid_token(client):
     assert client.get("/me", headers={"Authorization": "Bearer garbage"}).status_code == 401
     me = client.get("/me", headers=ana.auth)
     assert me.status_code == 200
-    assert me.json() == {"id": ana.id, "email": ana.email, "name": "Ana", "role": "patient",
-                         "timezone": "UTC"}
+    body = me.json()
+    assert {k: body[k] for k in ("id", "email", "name", "role", "timezone", "roleName")} == {
+        "id": ana.id, "email": ana.email, "name": "Ana", "role": "patient", "timezone": "UTC",
+        "roleName": "Patient"}
+    assert "entries.write.medical" in body["permissions"] and "panel.access" not in body["permissions"]
 
 
 def test_token_signed_with_another_secret_is_refused(client):

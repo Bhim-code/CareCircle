@@ -37,12 +37,27 @@ def _migrated_database() -> None:
     command.upgrade(config, "head")
 
 
+# Installed by the migrations and kept between tests (reset below instead).
+_REFERENCE_TABLES = {"permissions", "roles", "role_permissions"}
+
+
 @pytest.fixture(autouse=True)
 def _empty_tables() -> None:
-    tables = ", ".join(t.name for t in Base.metadata.sorted_tables)
+    from app.core.permissions import DEFAULT_ROLES
+
+    tables = ", ".join(t.name for t in Base.metadata.sorted_tables if t.name not in _REFERENCE_TABLES)
     with get_engine().begin() as connection:
-        # TRUNCATE does not fire the access_log row trigger, so tests can reset it.
+        # TRUNCATE does not fire the append-only row triggers, so tests can reset them.
         connection.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
+        # Put the built-in roles back exactly as installed; drop roles made by tests.
+        connection.execute(text("DELETE FROM roles WHERE NOT is_system"))
+        for role in DEFAULT_ROLES:
+            role_id = connection.execute(text("SELECT id FROM roles WHERE is_system AND kind = :k"),
+                                         {"k": role["kind"]}).scalar()
+            connection.execute(text("DELETE FROM role_permissions WHERE role_id = :r"), {"r": role_id})
+            connection.execute(text("INSERT INTO role_permissions (role_id, permission_id) "
+                                    "SELECT :r, id FROM permissions WHERE code = ANY(:c)"),
+                               {"r": role_id, "c": list(role["permissions"])})
 
 
 @pytest.fixture
