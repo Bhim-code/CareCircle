@@ -60,7 +60,7 @@ or `DATABASE_URL` in `.env` is wrong.
 pytest
 ```
 
-129 tests run against a real PostgreSQL database built from the migrations, in about
+131 tests run against a real PostgreSQL database built from the migrations, in about
 20 seconds. They always use `TEST_DATABASE_URL` (default `carecircle_test`), never your
 data. GitHub Actions runs them on every push (`.github/workflows/backend.yml`).
 
@@ -78,7 +78,8 @@ python -m app.cli set-active --email someone@example.com --inactive
 Admin and supervisor accounts can only be made with `app.cli` (never by sign-up).
 
 **Companies.** A supervisor belongs to one company and sees all of that company's patients
-and caregivers (and their records), and nothing from any other company. An admin is
+and caregivers (and their records), and nothing from any other company. A supervisor can
+switch their company's caregivers on or off (switching off signs them out at once). An admin is
 global. Admins put patients and caregivers into a company from the admin panel or with
 `set-company`. The seed creates Harbour Home Care (supervisor `sue@`) and Northside Care
 (supervisor `nina@`), plus `al@` as admin. All are `@demo.carecircle.test`, password `demo1234`.

@@ -228,7 +228,7 @@ function shell(current, content) {
       h('div', { class: 'mt-4 md:mt-8' }, nav),
       user ? h('div', { class: 'mt-4 border-t border-rule px-3 pt-4 md:absolute md:bottom-8 md:w-[13rem]' },
         h('p', { class: 'font-bold' }, user.name),
-        h('p', { class: 'text-sm text-muted' }, user.role === 'admin' ? 'Administrator, all companies' : 'Supervisor, read only'),
+        h('p', { class: 'text-sm text-muted' }, user.role === 'admin' ? 'Administrator, all companies' : 'Supervisor'),
         s.company ? h('p', { class: 'text-sm text-muted' }, s.company) : null,
         h('div', { class: 'mt-2' }, signOut)) : null),
     h('main', { id: 'main', tabindex: '-1', class: 'mx-auto w-full max-w-6xl px-4 py-8 md:px-10' }, content));
@@ -393,37 +393,19 @@ async function peoplePage(root, { role, title, route }) {
         });
         companyCell = select;
       }
-      let actionCell = null;
-      if (me.role === 'admin' && u.id !== me.id) {
-        actionCell = h('button', {
-          class: 'text-sm underline underline-offset-2 hover:text-sage-dark',
-          onclick: async () => {
-            const turningOff = u.isActive;
-            const ok = await confirmAction(
-              turningOff ? `Turn off ${u.name}'s account?` : `Turn on ${u.name}'s account?`,
-              turningOff ? 'They are signed out everywhere at once and cannot sign in until the account is turned back on.'
-                : 'They will be able to sign in again.',
-              turningOff ? 'Turn off account' : 'Turn on account');
-            if (!ok) return;
-            try {
-              await api(`/admin/users/${u.id}`, { method: 'PATCH', body: { isActive: !u.isActive } });
-              toast(turningOff ? `${u.name}'s account is turned off.` : `${u.name}'s account is turned on.`);
-              render();
-            } catch (err) { toast(err.message); }
-          },
-        }, u.isActive ? 'Turn off' : 'Turn on');
-      }
+      // Admin: anyone but themselves. Supervisor: their company's caregivers (the API checks too).
+      const canSwitch = me.role === 'admin' ? u.id !== me.id : u.role === 'caregiver';
+      const statusCell = canSwitch ? accessSwitch(u) : (u.isActive ? 'Active' : h('span', { class: 'text-missed' }, 'Turned off'));
       return h('tr', { class: 'border-t border-rule' },
         h('td', { class: 'py-3 pr-4' }, nameCell),
         h('td', { class: 'py-3 pr-4 text-muted' }, u.email),
         role ? null : h('td', { class: 'py-3 pr-4 capitalize' }, u.role),
         me.role === 'admin' ? h('td', { class: 'py-3 pr-4' }, companyCell) : null,
-        h('td', { class: 'py-3 pr-4' }, u.isActive ? 'Active' : h('span', { class: 'text-missed' }, 'Turned off')),
-        h('td', { class: 'py-3 pr-4 text-muted' }, fmtDate(u.createdAt.slice(0, 10))),
-        me.role === 'admin' ? h('td', { class: 'py-3 text-right' }, actionCell) : null);
+        h('td', { class: 'py-3 pr-4' }, statusCell),
+        h('td', { class: 'py-3 pr-4 text-muted' }, fmtDate(u.createdAt.slice(0, 10))));
     });
-    const head = ['Name', 'Email', role ? null : 'Role', me.role === 'admin' ? 'Company' : null, 'Status', 'Joined',
-      me.role === 'admin' ? '' : null].filter((x) => x !== null);
+    const head = ['Name', 'Email', role ? null : 'Role', me.role === 'admin' ? 'Company' : null, 'Account', 'Joined']
+      .filter((x) => x !== null);
     tableHost.replaceChildren(
       h('div', { class: 'overflow-x-auto' }, h('table', { class: 'w-full text-left' },
         h('thead', {}, h('tr', { class: 'text-sm text-muted' }, head.map((c) => h('th', { scope: 'col', class: 'pb-2 pr-4 font-normal' }, c)))),
@@ -432,6 +414,35 @@ async function peoplePage(root, { role, title, route }) {
   } catch (err) {
     if (err.status !== 401) tableHost.replaceChildren(errorBox(err));
   }
+}
+
+/** On/off switch for an account. Off signs the person out everywhere at once. */
+function accessSwitch(u) {
+  const on = u.isActive;
+  const button = h('button', {
+    type: 'button', role: 'switch', 'aria-checked': on ? 'true' : 'false',
+    'aria-label': `${u.name}'s account`,
+    class: `relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${on ? 'bg-sage' : 'bg-rule'}`,
+    onclick: async () => {
+      if (on) {
+        const ok = await confirmAction(`Turn off ${u.name}'s account?`,
+          'They are signed out on every device at once and cannot sign in until you turn the account back on.',
+          'Turn off account');
+        if (!ok) return;
+      }
+      button.disabled = true;
+      try {
+        await api(`/admin/users/${u.id}`, { method: 'PATCH', body: { isActive: !on } });
+        toast(on ? `${u.name}'s account is turned off.` : `${u.name}'s account is turned on.`);
+        render();
+      } catch (err) {
+        if (err.status !== 401) toast(err.message);
+        button.disabled = false;
+      }
+    },
+  }, h('span', { class: `inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${on ? 'translate-x-[22px]' : 'translate-x-0.5'}` }));
+  return h('div', { class: 'flex items-center gap-3' }, button,
+    h('span', { class: on ? 'text-ink' : 'text-missed' }, on ? 'Active' : 'Turned off'));
 }
 
 function pager(data, goTo) {
@@ -463,7 +474,7 @@ async function caregiverPage(root, caregiverId) {
       fact('Email', c.email),
       fact('Company', c.company ? c.company.name : 'None'),
       fact('Records written this week', String(data.entriesWrittenLast7Days)),
-      fact('Account', c.isActive ? 'Active' : 'Turned off')),
+      fact('Account', accessSwitch(c))),
     h('h2', { class: 'mt-10 border-b border-rule pb-3 text-xl font-bold' }, `Patients (${data.patients.length})`),
     h('div', { class: 'mt-4' }, list),
     data.otherCompanyPatients ? h('p', { class: 'mt-4 text-sm text-muted' },

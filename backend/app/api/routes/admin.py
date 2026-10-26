@@ -1,7 +1,8 @@
 """Issue 11: endpoints for the admin panel.
 
 - Supervisor: sees every client (patient) and caregiver of THEIR OWN company, and
-  their data, and changes nothing. Anything from another company is a 404.
+  their data. The only change they can make is switching their own company's
+  caregivers on or off. Anything from another company is a 404.
 - Admin: global. Sees every company, turns accounts on or off, creates companies
   and puts people into them.
 - Every look at one patient's data writes a line to the access log
@@ -74,11 +75,11 @@ def staff(me: CurrentUser = Depends(current_user), db: Session = Depends(get_db)
 
 
 def admin(me: CurrentUser = Depends(staff), db: Session = Depends(get_db)) -> CurrentUser:
-    """Changes are for admins only. Supervisors are read only."""
+    """Admins only (creating companies). Supervisors can only switch their caregivers on/off."""
     if me.role != "admin":
         access.log_access(db, me.user, None, "admin.change.denied", outcome="denied")
         db.commit()
-        raise ApiError(403, "Supervisors have read-only access.")
+        raise ApiError(403, "Only an admin can do this.")
     return me
 
 
@@ -199,14 +200,27 @@ def list_users(role: str | None = None, q: Annotated[str | None, Query(max_lengt
 
 
 @router.patch("/users/{user_id}", response_model=AdminUserOut)
-def update_user(user_id: uuid.UUID, body: UserUpdateIn, me: CurrentUser = Depends(admin),
+def update_user(user_id: uuid.UUID, body: UserUpdateIn, me: CurrentUser = Depends(staff),
                 db: Session = Depends(get_db)) -> AdminUserOut:
-    """Admin only: turn an account off (signs it out everywhere at once) or back on,
-    and/or put a person into a company (organizationId, null to remove)."""
+    """Turn an account off (signs it out everywhere at once) or back on, and/or put a
+    person into a company (organizationId, null to remove).
+
+    - Admin: any account except their own; companies too.
+    - Supervisor: only isActive, and only for caregivers of their own company.
+    """
     user = db.get(User, user_id)
     if user is None:
         raise ApiError(404)
     sent = body.model_fields_set
+    if me.role != "admin":
+        if not _in_scope(me, user):
+            access.log_access(db, me.user, user.id, "user.change", outcome="denied")
+            db.commit()
+            raise ApiError(404)
+        if user.role != "caregiver" or sent - {"is_active"}:
+            access.log_access(db, me.user, user.id, "user.change", outcome="denied")
+            db.commit()
+            raise ApiError(403, "Supervisors can only switch their company's caregivers on or off.")
     if "organization_id" in sent:
         if user.role == "admin":
             raise ApiError(422, "Admins are global and cannot belong to a company.",

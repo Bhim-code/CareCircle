@@ -13,7 +13,8 @@ JavaScript, with no framework and nothing to build to run it.
    ```
 
 3. Open http://localhost:5500 and sign in (password `demo1234`):
-   - `sue@demo.carecircle.test`: supervisor of Harbour Home Care (sees only that company)
+   - `sue@demo.carecircle.test`: supervisor of Harbour Home Care (sees only that company,
+     can switch its caregivers on or off)
    - `nina@demo.carecircle.test`: supervisor of Northside Care
    - `al@demo.carecircle.test`: admin (every company; creates companies, moves people,
      turns accounts off and on)
@@ -28,11 +29,11 @@ Patients and caregivers are refused; they use the app. The port must match
 |---|---|
 | Overview | 7-day adherence circle, today's doses (taken, due, missed, upcoming), totals, for your company (supervisor) or all companies (admin) |
 | Patients | Search, then open a patient: details, caregivers, medicines, adherence |
-| Caregivers | Every caregiver of the company; open one to see the patients they look after |
+| Caregivers | Every caregiver of the company, each with an on/off switch; open one to see the patients they look after |
 | Patient: Records | Written records, filtered by kind and dates, with CSV export |
 | Patient: Reminders | Every dose and its status, with CSV export |
 | Patient: Documents | Health documents |
-| All accounts | Everyone in your company, filtered by role. Admins see every company and can change a person's company or turn accounts off and on. |
+| All accounts | Everyone in your company, filtered by role. Supervisors get an on/off switch on caregivers; admins on everyone (except themselves) and can change a person's company. |
 | Companies | Admin only: create companies and see their size |
 | Access log | Who looked at which patient's data and when, including refused attempts |
 
