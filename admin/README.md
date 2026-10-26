@@ -12,9 +12,11 @@ JavaScript, with no framework and nothing to build to run it.
    python -m http.server 5500
    ```
 
-3. Open http://localhost:5500 and sign in:
-   - `sue@demo.carecircle.test` / `demo1234`: supervisor (read only)
-   - `al@demo.carecircle.test` / `demo1234`: admin (can turn accounts off and on)
+3. Open http://localhost:5500 and sign in (password `demo1234`):
+   - `sue@demo.carecircle.test`: supervisor of Harbour Home Care (sees only that company)
+   - `nina@demo.carecircle.test`: supervisor of Northside Care
+   - `al@demo.carecircle.test`: admin (every company; creates companies, moves people,
+     turns accounts off and on)
 
 Patients and caregivers are refused; they use the app. The port must match
 `CORS_ORIGINS` in `backend/.env` (5500 by default). To point at another API, edit
@@ -24,12 +26,14 @@ Patients and caregivers are refused; they use the app. The port must match
 
 | Page | |
 |---|---|
-| Overview | 7-day adherence circle, today's doses (taken, due, missed, upcoming), totals |
+| Overview | 7-day adherence circle, today's doses (taken, due, missed, upcoming), totals, for your company (supervisor) or all companies (admin) |
 | Patients | Search, then open a patient: details, caregivers, medicines, adherence |
+| Caregivers | Every caregiver of the company; open one to see the patients they look after |
 | Patient: Records | Written records, filtered by kind and dates, with CSV export |
 | Patient: Reminders | Every dose and its status, with CSV export |
 | Patient: Documents | Health documents |
-| All accounts | Everyone, filtered by role; admins can turn accounts off and on |
+| All accounts | Everyone in your company, filtered by role. Admins see every company and can change a person's company or turn accounts off and on. |
+| Companies | Admin only: create companies and see their size |
 | Access log | Who looked at which patient's data and when, including refused attempts |
 
 Every patient page and export is written to the access log by the API.

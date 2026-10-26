@@ -60,20 +60,28 @@ or `DATABASE_URL` in `.env` is wrong.
 pytest
 ```
 
-114 tests run against a real PostgreSQL database built from the migrations, in about
+129 tests run against a real PostgreSQL database built from the migrations, in about
 20 seconds. They always use `TEST_DATABASE_URL` (default `carecircle_test`), never your
 data. GitHub Actions runs them on every push (`.github/workflows/backend.yml`).
 
 ## Demo data and staff accounts
 
 ```bash
-python -m app.seed      # demo patients, caregiver, supervisor, admin; password demo1234
-python -m app.cli create-staff --role supervisor --email sue@example.com --name "Sue"
+python -m app.seed      # two demo companies with patients, caregivers, supervisors; password demo1234
+python -m app.cli create-org --name "Harbour Home Care"
+python -m app.cli create-staff --role supervisor --email sue@example.com --name "Sue" --organization "Harbour Home Care"
+python -m app.cli create-staff --role admin --email al@example.com --name "Al"
+python -m app.cli set-company --email ana@example.com --organization "Harbour Home Care"
 python -m app.cli set-active --email someone@example.com --inactive
 ```
 
 Admin and supervisor accounts can only be made with `app.cli` (never by sign-up).
-The seed accounts are listed in `app/seed.py` (`ana@demo.carecircle.test` etc.).
+
+**Companies.** A supervisor belongs to one company and sees all of that company's patients
+and caregivers (and their records), and nothing from any other company. An admin is
+global. Admins put patients and caregivers into a company from the admin panel or with
+`set-company`. The seed creates Harbour Home Care (supervisor `sue@`) and Northside Care
+(supervisor `nina@`), plus `al@` as admin. All are `@demo.carecircle.test`, password `demo1234`.
 
 ## Background jobs
 
@@ -104,7 +112,7 @@ The full list with request and response shapes is at http://localhost:8000/docs.
 | Care links | `POST /care-links/invitations`, `GET /care-links`, `POST /care-links/invitations/{id}/accept`, `DELETE /care-links/{id}` |
 | Medicines | `GET/POST /medicines`, `DELETE /medicines/{id}`, `GET /reminders?day=`, `POST /reminders/{id}/acknowledge` |
 | Records | `GET /health-records`, `GET/POST /entries`, `PUT /entries/{id}`, `POST /entries/photo`, `GET /files/photos/{id}` |
-| Admin panel | `GET /admin/overview`, `/admin/users`, `PATCH /admin/users/{id}`, `/admin/patients/{id}` (+ `/reminders`, `/documents`, `/entries`, `.csv` exports), `/admin/access-log` |
+| Admin panel | `GET /admin/overview`, `/admin/users`, `PATCH /admin/users/{id}` (active, company), `/admin/patients/{id}` (+ `/reminders`, `/documents`, `/entries`, `.csv` exports), `/admin/caregivers/{id}`, `GET/POST /admin/organizations`, `/admin/access-log`. Supervisors see their own company only. |
 
 Where the API adds to or differs from `api-contract.md`: **`docs/CONTRACT-NOTES.md`**
 (please share with Biplav).

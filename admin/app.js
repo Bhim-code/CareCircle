@@ -112,6 +112,7 @@ const ACTION_LABEL = {
   'reminders.export': 'Exported reminders', 'entries.list': 'Read records in the app',
   'users.list': 'Listed accounts', 'user.deactivate': 'Turned off account',
   'user.activate': 'Turned on account', 'admin.denied': 'Tried to open the admin panel',
+  'caregiver.view': 'Opened caregiver', 'user.company': 'Changed company',
   'admin.change.denied': 'Tried to change an account',
 };
 const STATUS_CLASS = { taken: 'text-taken', due: 'text-due', missed: 'text-missed', upcoming: 'text-upcoming' };
@@ -208,7 +209,9 @@ function shell(current, content) {
   const nav = h('nav', { 'aria-label': 'Main', class: 'space-y-1' },
     navLink('#/overview', 'Overview', current),
     navLink('#/patients', 'Patients', current),
+    navLink('#/caregivers', 'Caregivers', current),
     navLink('#/accounts', 'All accounts', current),
+    user && user.role === 'admin' ? navLink('#/companies', 'Companies', current) : null,
     navLink('#/access-log', 'Access log', current));
   const signOut = h('button', {
     class: 'text-left text-sm text-muted underline-offset-2 hover:text-ink hover:underline',
@@ -225,7 +228,8 @@ function shell(current, content) {
       h('div', { class: 'mt-4 md:mt-8' }, nav),
       user ? h('div', { class: 'mt-4 border-t border-rule px-3 pt-4 md:absolute md:bottom-8 md:w-[13rem]' },
         h('p', { class: 'font-bold' }, user.name),
-        h('p', { class: 'text-sm text-muted' }, user.role === 'admin' ? 'Administrator' : 'Supervisor, read only'),
+        h('p', { class: 'text-sm text-muted' }, user.role === 'admin' ? 'Administrator, all companies' : 'Supervisor, read only'),
+        s.company ? h('p', { class: 'text-sm text-muted' }, s.company) : null,
         h('div', { class: 'mt-2' }, signOut)) : null),
     h('main', { id: 'main', tabindex: '-1', class: 'mx-auto w-full max-w-6xl px-4 py-8 md:px-10' }, content));
 }
@@ -273,6 +277,13 @@ function signInPage(notice) {
           throw new Error('This panel is for supervisors and administrators. Patients and caregivers use the CareCircle app.');
         }
         session.set(body);
+        if (body.user.role === 'supervisor') {
+          // Show which company this supervisor covers.
+          try {
+            const [own] = await api('/admin/organizations');
+            if (own) session.set({ ...session.get(), company: own.name });
+          } catch { /* shown as missing; not critical */ }
+        }
         go('#/overview');
       } catch (err) {
         message.textContent = err instanceof TypeError ? `Cannot reach the API at ${API}. Is it running?` : err.message;
@@ -310,12 +321,13 @@ async function overviewPage(root) {
     h('dd', { class: 'text-3xl font-bold' }, n), h('dt', { class: 'text-muted' }, label));
 
   root.replaceChildren(shell('#/overview', [
-    pageTitle('Overview', h('p', { class: 'text-muted' }, `Times shown in ${TZ}`)),
+    pageTitle(data.company ? data.company.name : 'All companies',
+      h('p', { class: 'text-muted' }, `Times shown in ${TZ}`)),
     h('section', { class: 'grid gap-10 border-b border-rule pb-10 md:grid-cols-[auto_1fr] md:items-center' },
       ring(data.adherenceLast7Days, 196),
       h('div', {},
         h('h2', { class: 'text-xl font-bold' }, "Today's doses"),
-        h('p', { class: 'mt-1 text-muted' }, t.total ? `${t.total} scheduled across all patients.` : 'No doses are scheduled today.'),
+        h('p', { class: 'mt-1 text-muted' }, t.total ? `${t.total} scheduled for ${data.company ? 'your company\'s' : 'all'} patients.` : 'No doses are scheduled today.'),
         h('div', { class: 'mt-5' }, bar),
         h('ul', { class: 'mt-4 flex flex-wrap gap-x-6 gap-y-2' },
           parts.map(([k, n]) => h('li', {}, h('span', { class: `font-bold ${STATUS_CLASS[k]}` }, n), ' ', STATUS_LABEL[k].toLowerCase()))),
@@ -350,6 +362,7 @@ async function peoplePage(root, { role, title, route }) {
   root.replaceChildren(shell(route, [pageTitle(title), form, tableHost]));
 
   try {
+    const companies = me.role === 'admin' ? await api('/admin/organizations') : [];
     const data = await api(`/admin/users${query({ role: state.role, q: state.q, page: state.page, pageSize: 25 })}`);
     if (!data.items.length) {
       tableHost.replaceChildren(h('p', { class: 'py-10 text-muted' },
@@ -357,9 +370,29 @@ async function peoplePage(root, { role, title, route }) {
       return;
     }
     const rows = data.items.map((u) => {
-      const nameCell = u.role === 'patient'
-        ? h('a', { href: `#/patients/${u.id}`, class: 'font-bold text-sage-dark underline-offset-2 hover:underline' }, u.name)
+      const detail = { patient: `#/patients/${u.id}`, caregiver: `#/caregivers/${u.id}` }[u.role];
+      const nameCell = detail
+        ? h('a', { href: detail, class: 'font-bold text-sage-dark underline-offset-2 hover:underline' }, u.name)
         : h('span', { class: 'font-bold' }, u.name);
+      let companyCell = u.company ? u.company.name : h('span', { class: 'text-muted' }, u.role === 'admin' ? 'All' : 'None');
+      if (me.role === 'admin' && u.role !== 'admin') {
+        const select = h('select', { 'aria-label': `Company for ${u.name}`, class: `${inputClass} py-1 text-sm` },
+          u.role === 'supervisor' ? null : h('option', { value: '' }, 'No company'),
+          companies.map((c) => h('option', { value: c.id, selected: u.company && u.company.id === c.id ? true : null }, c.name)));
+        select.addEventListener('change', async () => {
+          const target = companies.find((c) => c.id === select.value);
+          const ok = await confirmAction(`Move ${u.name}?`,
+            target ? `${u.name} will belong to ${target.name}. Only that company's supervisors will see them.`
+              : `${u.name} will not belong to any company. Only admins will see them.`, 'Move');
+          if (!ok) { render(); return; }
+          try {
+            await api(`/admin/users/${u.id}`, { method: 'PATCH', body: { organizationId: select.value || null } });
+            toast(target ? `${u.name} now belongs to ${target.name}.` : `${u.name} no longer belongs to a company.`);
+            render();
+          } catch (err) { toast(err.message); render(); }
+        });
+        companyCell = select;
+      }
       let actionCell = null;
       if (me.role === 'admin' && u.id !== me.id) {
         actionCell = h('button', {
@@ -384,11 +417,13 @@ async function peoplePage(root, { role, title, route }) {
         h('td', { class: 'py-3 pr-4' }, nameCell),
         h('td', { class: 'py-3 pr-4 text-muted' }, u.email),
         role ? null : h('td', { class: 'py-3 pr-4 capitalize' }, u.role),
+        me.role === 'admin' ? h('td', { class: 'py-3 pr-4' }, companyCell) : null,
         h('td', { class: 'py-3 pr-4' }, u.isActive ? 'Active' : h('span', { class: 'text-missed' }, 'Turned off')),
         h('td', { class: 'py-3 pr-4 text-muted' }, fmtDate(u.createdAt.slice(0, 10))),
         me.role === 'admin' ? h('td', { class: 'py-3 text-right' }, actionCell) : null);
     });
-    const head = ['Name', 'Email', role ? null : 'Role', 'Status', 'Joined', me.role === 'admin' ? '' : null].filter((x) => x !== null);
+    const head = ['Name', 'Email', role ? null : 'Role', me.role === 'admin' ? 'Company' : null, 'Status', 'Joined',
+      me.role === 'admin' ? '' : null].filter((x) => x !== null);
     tableHost.replaceChildren(
       h('div', { class: 'overflow-x-auto' }, h('table', { class: 'w-full text-left' },
         h('thead', {}, h('tr', { class: 'text-sm text-muted' }, head.map((c) => h('th', { scope: 'col', class: 'pb-2 pr-4 font-normal' }, c)))),
@@ -406,6 +441,69 @@ function pager(data, goTo) {
     h('button', { class: buttonClass, disabled: data.page <= 1 ? true : null, onclick: () => goTo(data.page - 1) }, 'Previous'),
     h('span', { class: 'text-muted' }, `Page ${data.page} of ${pages} (${data.total} total)`),
     h('button', { class: buttonClass, disabled: data.page >= pages ? true : null, onclick: () => goTo(data.page + 1) }, 'Next'));
+}
+
+async function caregiverPage(root, caregiverId) {
+  const data = await api(`/admin/caregivers/${encodeURIComponent(caregiverId)}`);
+  const c = data.caregiver;
+  const list = data.patients.length ? h('div', { class: 'overflow-x-auto' }, h('table', { class: 'w-full text-left' },
+    h('thead', {}, h('tr', { class: 'text-sm text-muted' }, ['Patient', 'Email', 'Looking after them since', 'Doses confirmed, 7 days']
+      .map((t) => h('th', { scope: 'col', class: 'pb-2 pr-4 font-normal' }, t)))),
+    h('tbody', {}, data.patients.map((p) => h('tr', { class: 'border-t border-rule' },
+      h('td', { class: 'py-3 pr-4' }, h('a', { href: `#/patients/${p.id}`, class: 'font-bold text-sage-dark underline-offset-2 hover:underline' }, p.name)),
+      h('td', { class: 'py-3 pr-4 text-muted' }, p.email),
+      h('td', { class: 'py-3 pr-4' }, p.linkedSince ? fmtDate(p.linkedSince.slice(0, 10)) : '—'),
+      h('td', { class: 'py-3 pr-4 font-bold' }, pct(p.adherenceLast7Days)))))))
+    : h('p', { class: 'py-6 text-muted' }, 'Not looking after any patients in this company yet.');
+
+  root.replaceChildren(shell('#/caregivers', [
+    h('p', { class: 'mb-4' }, h('a', { href: '#/caregivers', class: 'text-muted underline-offset-2 hover:underline' }, 'All caregivers')),
+    h('h1', { class: 'text-3xl font-bold tracking-tight' }, c.name),
+    h('dl', { class: 'mt-6 grid gap-x-10 gap-y-4 sm:grid-cols-2' },
+      fact('Email', c.email),
+      fact('Company', c.company ? c.company.name : 'None'),
+      fact('Records written this week', String(data.entriesWrittenLast7Days)),
+      fact('Account', c.isActive ? 'Active' : 'Turned off')),
+    h('h2', { class: 'mt-10 border-b border-rule pb-3 text-xl font-bold' }, `Patients (${data.patients.length})`),
+    h('div', { class: 'mt-4' }, list),
+    data.otherCompanyPatients ? h('p', { class: 'mt-4 text-sm text-muted' },
+      `Also looks after ${data.otherCompanyPatients} patient${data.otherCompanyPatients === 1 ? '' : 's'} in another company (not shown).`) : null,
+  ]));
+}
+
+async function companiesPage(root) {
+  const companies = await api('/admin/organizations');
+  const name = h('input', { id: 'company-name', required: true, maxlength: 100, class: `${inputClass} w-full sm:w-72` });
+  const message = h('p', { role: 'alert', class: 'min-h-[1.25rem] text-sm text-missed' });
+  const form = h('form', { class: 'mt-2 flex flex-wrap items-end gap-3', novalidate: true,
+    onsubmit: async (e) => {
+      e.preventDefault();
+      message.textContent = '';
+      if (!name.value.trim()) { message.textContent = 'Enter the company name.'; return; }
+      try {
+        const created = await api('/admin/organizations', { method: 'POST', body: { name: name.value.trim() } });
+        toast(`${created.name} created. Put people in it from All accounts.`);
+        render();
+      } catch (err) { message.textContent = (err.fields && err.fields.name) || err.message; }
+    } },
+  h('div', { class: 'flex flex-col gap-1' }, h('label', { for: 'company-name', class: 'text-sm text-muted' }, 'New company'), name),
+  h('button', { class: buttonClass }, 'Create company'));
+
+  const table = companies.length ? h('div', { class: 'overflow-x-auto' }, h('table', { class: 'w-full text-left' },
+    h('thead', {}, h('tr', { class: 'text-sm text-muted' }, ['Company', 'Patients', 'Caregivers', 'Supervisors', 'Created']
+      .map((t) => h('th', { scope: 'col', class: 'pb-2 pr-4 font-normal' }, t)))),
+    h('tbody', {}, companies.map((c) => h('tr', { class: 'border-t border-rule' },
+      h('td', { class: 'py-3 pr-4 font-bold' }, c.name),
+      h('td', { class: 'py-3 pr-4' }, c.patients),
+      h('td', { class: 'py-3 pr-4' }, c.caregivers),
+      h('td', { class: 'py-3 pr-4' }, c.supervisors),
+      h('td', { class: 'py-3 pr-4 text-muted' }, fmtDate(c.createdAt.slice(0, 10))))))))
+    : h('p', { class: 'py-6 text-muted' }, 'No companies yet. Create the first one above.');
+
+  root.replaceChildren(shell('#/companies', [
+    pageTitle('Companies'),
+    h('p', { class: 'max-w-prose text-muted' }, "Each company's supervisors see only that company's patients and caregivers. Put people into a company from All accounts."),
+    form, message, h('div', { class: 'mt-6' }, table)]));
 }
 
 async function patientPage(root, patientId, tab) {
@@ -588,15 +686,20 @@ async function render() {
   root.replaceChildren(shell(path, loading()));
   try {
     const patient = /^\/patients\/([0-9a-f-]{36})(?:\/(records|reminders|documents))?$/i.exec(path);
+    const caregiver = /^\/caregivers\/([0-9a-f-]{36})$/i.exec(path);
     if (path === '/overview') await overviewPage(root);
     else if (path === '/patients') await peoplePage(root, { role: 'patient', title: 'Patients', route: '#/patients' });
+    else if (path === '/caregivers') await peoplePage(root, { role: 'caregiver', title: 'Caregivers', route: '#/caregivers' });
     else if (path === '/accounts') await peoplePage(root, { title: 'All accounts', route: '#/accounts' });
+    else if (path === '/companies') await companiesPage(root);
+    else if (caregiver) await caregiverPage(root, caregiver[1]);
     else if (path === '/access-log') await accessLogPage(root);
     else if (patient) await patientPage(root, patient[1], patient[2] || 'records');
     else root.replaceChildren(shell(path, [pageTitle('Page not found'), h('a', { href: '#/overview', class: 'underline' }, 'Go to the overview')]));
   } catch (err) {
     if (err.status === 401) return;
-    const message = err.status === 404 ? 'This patient does not exist, or the link is wrong.' : err.message;
+    const message = err.status === 404
+      ? 'This person does not exist, belongs to another company, or the link is wrong.' : err.message;
     root.replaceChildren(shell(path, [pageTitle('Could not load this page'), errorBox({ message })]));
   }
   const main = document.getElementById('main');

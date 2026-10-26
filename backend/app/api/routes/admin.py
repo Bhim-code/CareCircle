@@ -1,7 +1,9 @@
 """Issue 11: endpoints for the admin panel.
 
-- Supervisor: read everything, change nothing.
-- Admin: read everything, and turn accounts on or off.
+- Supervisor: sees every client (patient) and caregiver of THEIR OWN company, and
+  their data, and changes nothing. Anything from another company is a 404.
+- Admin: global. Sees every company, turns accounts on or off, creates companies
+  and puts people into them.
 - Every look at one patient's data writes a line to the access log
   (who, which patient, what, when). Refused attempts are logged too.
 """
@@ -16,6 +18,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased
 
 from app.api.deps import CurrentUser, current_user
@@ -26,6 +29,7 @@ from app.db.models import (
     EntryPhoto,
     HealthDocument,
     Medicine,
+    Organization,
     RecordEntry,
     Reminder,
     User,
@@ -37,6 +41,11 @@ from app.schemas.admin import (
     AdminMedicineOut,
     AdminReminderOut,
     AdminUserOut,
+    CaregiverDetailOut,
+    CaregiverPatientOut,
+    CompanyIn,
+    CompanyOut,
+    CompanyRef,
     OverviewOut,
     Page,
     PatientDetailOut,
@@ -73,6 +82,45 @@ def admin(me: CurrentUser = Depends(staff), db: Session = Depends(get_db)) -> Cu
     return me
 
 
+# --- company scope -------------------------------------------------------------
+
+def _company(me: CurrentUser) -> uuid.UUID | None:
+    """The company a viewer is limited to. None means every company (admin only)."""
+    if me.role == "admin":
+        return None
+    if me.user.organization_id is None:  # cannot happen (database rule), but never fall open
+        raise ApiError(403, "Your account is not attached to a company.")
+    return me.user.organization_id
+
+
+def _scope(query, me: CurrentUser, column=User.organization_id):
+    company = _company(me)
+    return query if company is None else query.where(column == company)
+
+
+def _company_patient_ids(me: CurrentUser):
+    """Subquery: ids of the patients this viewer may see."""
+    return _scope(select(User.id).where(User.role == "patient"), me)
+
+
+def _in_scope(me: CurrentUser, user: User) -> bool:
+    company = _company(me)
+    return company is None or user.organization_id == company
+
+
+def _users_out(db: Session, users: list[User]) -> list[AdminUserOut]:
+    org_ids = {u.organization_id for u in users if u.organization_id}
+    names = dict(db.execute(select(Organization.id, Organization.name)
+                            .where(Organization.id.in_(org_ids))).all()) if org_ids else {}
+    out = []
+    for u in users:
+        item = AdminUserOut.model_validate(u)
+        if u.organization_id:
+            item.company = CompanyRef(id=u.organization_id, name=names[u.organization_id])
+        out.append(item)
+    return out
+
+
 def _zone(name: str | None) -> ZoneInfo:
     try:
         return ZoneInfo(name or "UTC")
@@ -81,8 +129,13 @@ def _zone(name: str | None) -> ZoneInfo:
 
 
 def _patient(db: Session, patient_id: uuid.UUID, me: CurrentUser, action: str) -> User:
+    """Load a patient the viewer may see, and log the view. Another company's: 404 + logged."""
     patient = db.get(User, patient_id)
     if patient is None or patient.role != "patient":
+        raise ApiError(404)
+    if not _in_scope(me, patient):
+        access.log_access(db, me.user, patient.id, action, outcome="denied")
+        db.commit()
         raise ApiError(404)
     access.log_access(db, me.user, patient.id, action)
     db.commit()
@@ -100,19 +153,26 @@ def _day_range(start: date | None, end: date | None) -> tuple[datetime | None, d
 @router.get("/overview", response_model=OverviewOut)
 def overview(timezone: Annotated[str | None, Query(max_length=64)] = None,
              me: CurrentUser = Depends(staff), db: Session = Depends(get_db)) -> OverviewOut:
-    """Totals only, no one's details, so this is not written to the access log."""
+    """Totals only, no one's details, so this is not written to the access log.
+    A supervisor's numbers cover their own company only."""
     tz = _zone(timezone)
+    company = _company(me)
     start, end = local_day_bounds(datetime.now(tz).date(), tz)
-    counts = dict(db.execute(select(User.role, func.count()).where(User.is_active.is_(True))
+    counts = dict(db.execute(_scope(select(User.role, func.count()).where(User.is_active.is_(True)), me)
                              .group_by(User.role)).all())
     week_ago = datetime.now(UTC) - timedelta(days=7)
+    patients = _company_patient_ids(me)
+    org = db.get(Organization, company) if company else None
     return OverviewOut(
+        company=CompanyRef(id=org.id, name=org.name) if org else None,
         patients=counts.get("patient", 0),
         caregivers=counts.get("caregiver", 0),
-        active_links=db.scalar(select(func.count()).where(CareLink.status == "active")) or 0,
-        reminders_today=RemindersToday(**stats.reminder_counts(db, start, end)),
-        adherence_last_7_days=stats.adherence(db, 7),
-        entries_last_7_days=db.scalar(select(func.count()).where(RecordEntry.recorded_at >= week_ago)) or 0,
+        active_links=db.scalar(select(func.count()).where(
+            CareLink.status == "active", CareLink.patient_id.in_(patients))) or 0,
+        reminders_today=RemindersToday(**stats.reminder_counts(db, start, end, organization_id=company)),
+        adherence_last_7_days=stats.adherence(db, 7, organization_id=company),
+        entries_last_7_days=db.scalar(select(func.count()).where(
+            RecordEntry.recorded_at >= week_ago, RecordEntry.patient_id.in_(patients))) or 0,
     )
 
 
@@ -120,8 +180,9 @@ def overview(timezone: Annotated[str | None, Query(max_length=64)] = None,
 def list_users(role: str | None = None, q: Annotated[str | None, Query(max_length=100)] = None,
                active: bool | None = None, page: PageNo = 1, page_size: PageSize = 25,
                me: CurrentUser = Depends(staff), db: Session = Depends(get_db)) -> Page[AdminUserOut]:
-    """Search by name or email. Filter by role and active state."""
-    query = select(User)
+    """Search by name or email. Filter by role and active state.
+    A supervisor sees only the people in their own company."""
+    query = _scope(select(User), me)
     if role:
         query = query.where(User.role == role)
     if active is not None:
@@ -134,25 +195,110 @@ def list_users(role: str | None = None, q: Annotated[str | None, Query(max_lengt
     rows = db.scalars(query.order_by(User.name, User.email).offset((page - 1) * page_size).limit(page_size))
     access.log_access(db, me.user, None, "users.list")
     db.commit()
-    return Page(items=[AdminUserOut.model_validate(u) for u in rows], total=total, page=page,
-                page_size=page_size)
+    return Page(items=_users_out(db, list(rows)), total=total, page=page, page_size=page_size)
 
 
 @router.patch("/users/{user_id}", response_model=AdminUserOut)
 def update_user(user_id: uuid.UUID, body: UserUpdateIn, me: CurrentUser = Depends(admin),
                 db: Session = Depends(get_db)) -> AdminUserOut:
-    """Admin only: turn an account off (signs it out everywhere at once) or back on."""
+    """Admin only: turn an account off (signs it out everywhere at once) or back on,
+    and/or put a person into a company (organizationId, null to remove)."""
     user = db.get(User, user_id)
     if user is None:
         raise ApiError(404)
-    if user.id == me.id and not body.is_active:
-        raise ApiError(422, "You cannot turn off your own account.", fields={"isActive": "Not for yourself."})
-    user.is_active = body.is_active
-    if not body.is_active:
-        end_all_sessions(db, user.id)
-    access.log_access(db, me.user, user.id, "user.activate" if body.is_active else "user.deactivate")
+    sent = body.model_fields_set
+    if "organization_id" in sent:
+        if user.role == "admin":
+            raise ApiError(422, "Admins are global and cannot belong to a company.",
+                           fields={"organizationId": "Not for admins."})
+        if body.organization_id is None and user.role == "supervisor":
+            raise ApiError(422, "A supervisor must belong to a company.",
+                           fields={"organizationId": "Choose a company."})
+        if body.organization_id is not None and db.get(Organization, body.organization_id) is None:
+            raise ApiError(422, fields={"organizationId": "No such company."})
+        if user.organization_id != body.organization_id:
+            user.organization_id = body.organization_id
+            if user.role == "supervisor":
+                end_all_sessions(db, user.id)  # their view changes: make them sign in again
+            access.log_access(db, me.user, user.id, "user.company")
+    if "is_active" in sent and body.is_active is not None:
+        if user.id == me.id and not body.is_active:
+            raise ApiError(422, "You cannot turn off your own account.", fields={"isActive": "Not for yourself."})
+        if user.is_active != body.is_active:
+            user.is_active = body.is_active
+            if not body.is_active:
+                end_all_sessions(db, user.id)
+            access.log_access(db, me.user, user.id, "user.activate" if body.is_active else "user.deactivate")
     db.commit()
-    return AdminUserOut.model_validate(user)
+    return _users_out(db, [user])[0]
+
+
+# --- one caregiver -----------------------------------------------------------
+
+@router.get("/caregivers/{caregiver_id}", response_model=CaregiverDetailOut)
+def caregiver_detail(caregiver_id: uuid.UUID, me: CurrentUser = Depends(staff),
+                     db: Session = Depends(get_db)) -> CaregiverDetailOut:
+    """A caregiver of the viewer's company, and the clients they look after."""
+    caregiver = db.get(User, caregiver_id)
+    if caregiver is None or caregiver.role != "caregiver":
+        raise ApiError(404)
+    if not _in_scope(me, caregiver):
+        access.log_access(db, me.user, caregiver.id, "caregiver.view", outcome="denied")
+        db.commit()
+        raise ApiError(404)
+    access.log_access(db, me.user, caregiver.id, "caregiver.view")
+    db.commit()
+    company = _company(me)
+    linked = db.execute(select(User, CareLink.accepted_at).join(CareLink, CareLink.patient_id == User.id)
+                        .where(CareLink.caregiver_id == caregiver.id, CareLink.status == "active")
+                        .order_by(User.name)).all()
+    visible = [(p, since) for p, since in linked if company is None or p.organization_id == company]
+    week_ago = datetime.now(UTC) - timedelta(days=7)
+    return CaregiverDetailOut(
+        caregiver=_users_out(db, [caregiver])[0],
+        patients=[CaregiverPatientOut(id=p.id, name=p.name, email=p.email, linked_since=since,
+                                      adherence_last_7_days=stats.adherence(db, 7, p.id))
+                  for p, since in visible],
+        other_company_patients=len(linked) - len(visible),
+        entries_written_last_7_days=db.scalar(select(func.count()).where(
+            RecordEntry.recorded_by == caregiver.id, RecordEntry.recorded_at >= week_ago,
+            RecordEntry.patient_id.in_(_company_patient_ids(me)))) or 0,
+    )
+
+
+# --- companies ---------------------------------------------------------------
+
+def _companies_out(db: Session, orgs: list[Organization]) -> list[CompanyOut]:
+    counts = {(org_id, role): n for org_id, role, n in db.execute(
+        select(User.organization_id, User.role, func.count())
+        .where(User.organization_id.in_([o.id for o in orgs]), User.is_active.is_(True))
+        .group_by(User.organization_id, User.role))}
+    return [CompanyOut(id=o.id, name=o.name, created_at=o.created_at,
+                       patients=counts.get((o.id, "patient"), 0),
+                       caregivers=counts.get((o.id, "caregiver"), 0),
+                       supervisors=counts.get((o.id, "supervisor"), 0)) for o in orgs]
+
+
+@router.get("/organizations", response_model=list[CompanyOut])
+def list_companies(me: CurrentUser = Depends(staff), db: Session = Depends(get_db)) -> list[CompanyOut]:
+    """Admin: every company. Supervisor: only their own."""
+    query = _scope(select(Organization), me, Organization.id).order_by(Organization.name)
+    return _companies_out(db, list(db.scalars(query)))
+
+
+@router.post("/organizations", response_model=CompanyOut, status_code=201)
+def create_company(body: CompanyIn, me: CurrentUser = Depends(admin),
+                   db: Session = Depends(get_db)) -> CompanyOut:
+    org = Organization(name=body.name)
+    db.add(org)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise ApiError(409, "A company with this name already exists.",
+                       fields={"name": "Choose another name."}) from None
+    db.refresh(org)
+    return _companies_out(db, [org])[0]
 
 
 # --- one patient -------------------------------------------------------------
@@ -166,7 +312,7 @@ def patient_detail(patient_id: uuid.UUID, me: CurrentUser = Depends(staff),
     medicines = db.scalars(select(Medicine).where(Medicine.patient_id == patient.id)
                            .order_by(Medicine.created_at))
     return PatientDetailOut(
-        patient=AdminUserOut.model_validate(patient),
+        patient=_users_out(db, [patient])[0],
         caregivers=[PersonWithEmailOut.model_validate(c) for c in caregivers],
         medicines=[AdminMedicineOut.model_validate(m) for m in medicines],
         adherence_last_7_days=stats.adherence(db, 7, patient.id),
@@ -302,9 +448,13 @@ def access_log(patient_id: Annotated[uuid.UUID | None, Query(alias="patientId")]
                viewer_id: Annotated[uuid.UUID | None, Query(alias="viewerId")] = None,
                outcome: str | None = None, page: PageNo = 1, page_size: PageSize = 50,
                me: CurrentUser = Depends(staff), db: Session = Depends(get_db)) -> Page[AccessLogOut]:
+    """A supervisor sees lines about their company's people, or made by their company's people."""
     viewer, patient = aliased(User), aliased(User)
     query = (select(AccessLog, viewer, patient).join(viewer, viewer.id == AccessLog.viewer_id)
              .outerjoin(patient, patient.id == AccessLog.patient_id))
+    company = _company(me)
+    if company is not None:
+        query = query.where(or_(patient.organization_id == company, viewer.organization_id == company))
     if patient_id:
         query = query.where(AccessLog.patient_id == patient_id)
     if viewer_id:

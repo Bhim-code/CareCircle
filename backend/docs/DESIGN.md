@@ -34,7 +34,8 @@ The ER diagram is in `backend/README.md`. Main tables:
 
 | Table | Holds |
 |---|---|
-| `users` | Everyone: role (`patient`, `caregiver`, `admin`, `supervisor`), argon2 password hash, time zone, active flag |
+| `organizations` | Care companies |
+| `users` | Everyone: role (`patient`, `caregiver`, `admin`, `supervisor`), company, argon2 password hash, time zone, active flag. A supervisor must have a company; an admin never has one (database rules). |
 | `auth_sessions` | One row per refresh token (stored as a SHA-256 hash), grouped by sign-in |
 | `care_links` | Patient → caregiver invitations and links (`pending`, `active`, `ended`) |
 | `medicines`, `reminders` | What to take and when (local times), and each dose as an exact UTC moment with when it was confirmed |
@@ -63,11 +64,12 @@ Design decisions:
 |---|---|---|---|---|
 | Sign up in the app | yes | yes | no, created on the server | no, created on the server |
 | Own reminders, confirm a dose, medicines, documents | yes | no | — | — |
-| Read written records | own | linked patients only (active link) | all, read only, logged | all, read only, logged |
+| Read written records | own | linked patients only (active link) | own company's patients, read only, logged | all companies, read only, logged |
+| See patients and caregivers in the panel | — | — | all of their own company, nothing else | everyone |
 | Write medical / behavioural / incident / medication | yes / no / yes / yes | no / yes / yes / yes | no | no |
 | Edit a record | only their own | only their own | no | no |
 | Invite or remove caregivers | yes | accept, decline or leave | — | — |
-| Admin panel | no | no | read only | read, and turn accounts on or off |
+| Admin panel | no | no | read only, own company | read; turn accounts on/off; create companies and put people in them |
 | See who viewed their data | yes | — | the full access log | the full access log |
 
 How this is enforced:
@@ -76,12 +78,15 @@ How this is enforced:
    expiry, that the account is still active, and that the sign-in has not been ended. So
    signing out or deactivating an account takes effect on the very next request.
 2. **Role.** Route guards (`patient_only`, `staff`, `admin` and so on) return **403**.
-3. **Which patient.** `services/access.py` answers "may this person read this patient?".
+3. **Which company.** Every admin endpoint limits a supervisor's queries to their own
+   company (`_company` / `_scope` in `api/routes/admin.py`). Opening another company's
+   patient or caregiver by id returns 404 and is logged as refused.
+4. **Which patient.** `services/access.py` answers "may this person read this patient?".
    Caregivers need an *active* link. Someone else's data returns **404**, never 403, so the
    API does not reveal that a record exists.
-4. **Input.** Every body rejects unknown fields, so `recordedBy`, `role` or `isActive`
+5. **Input.** Every body rejects unknown fields, so `recordedBy`, `role` or `isActive`
    cannot be smuggled in. `recordedAt` and `recordedBy` always come from the token.
-5. **Logging.** Caregiver reads and every supervisor or admin view and export are
+6. **Logging.** Caregiver reads and every supervisor or admin view and export are
    written to `access_log`, as are refused attempts to use the admin API.
 
 ## 4. Security measures
@@ -106,7 +111,7 @@ How this is enforced:
 
 ## 5. Testing
 
-`pytest` runs 114 automated tests against a real PostgreSQL database built from the
+`pytest` runs 129 automated tests against a real PostgreSQL database built from the
 migrations (about 20 seconds). Each test starts with empty tables.
 
 | File | What it proves |
@@ -115,9 +120,10 @@ migrations (about 20 seconds). Each test starts with empty tables.
 | `test_entries.py` (28) | Two patients and two caregivers: nobody reads or edits anyone else's records (404 by id, too); role/kind table; server-set fields; history kept; ending a link removes access; photo type, size, ownership, expiry and forged links |
 | `test_medicines_reminders.py` (13) | Own reminders only; the patient's local day; daylight saving; idempotent generation; "I took it" only by the owner and never by the server |
 | `test_admin.py` (9) | Patients and caregivers refused (and logged); supervisor read only; every view and export logged; CSV injection safe; patients see who viewed them |
+| `test_companies.py` (14) | Two companies: each supervisor sees all of their own company's patients and caregivers and none of the other's (lists, search, by id, CSV, overview, access log); only admins create companies and move people |
 | `test_jobs.py` (10) | Missed-dose alert after 60 minutes, sent once, only to linked caregivers who opted in, retried on failure; due pushes once; no medicine names |
 | `test_care_links.py` (6), `test_preferences.py` (3) | Invitations, accepting, ending; settings per person |
-| `test_schema.py` (6), `test_errors_and_cors.py` (13), `test_health.py` (4) | Database constraints and append-only log; models match migrations; error format; CORS; configuration |
+| `test_schema.py` (7), `test_errors_and_cors.py` (13), `test_health.py` (4) | Database constraints and append-only log; models match migrations; error format; CORS; configuration |
 
 GitHub Actions runs the same suite on every push and pull request
 (`.github/workflows/backend.yml`).

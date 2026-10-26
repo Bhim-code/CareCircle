@@ -62,11 +62,25 @@ def test_mood_only_on_behavioural_entries(db):
 
 
 def test_access_log_cannot_be_edited_or_deleted(db):
-    viewer = _user(db, role="supervisor")
-    db.add(AccessLog(viewer_id=viewer.id, viewer_role="supervisor", action="view"))
+    viewer = _user(db, role="admin")
+    db.add(AccessLog(viewer_id=viewer.id, viewer_role="admin", action="view"))
     db.commit()
     with pytest.raises(DBAPIError, match="append-only"):
         db.execute(text("UPDATE access_log SET action = 'changed'"))
     db.rollback()
     with pytest.raises(DBAPIError, match="append-only"):
         db.execute(text("DELETE FROM access_log"))
+
+
+def test_supervisor_needs_a_company_and_admin_has_none(db):
+    from app.db.models import Organization
+    db.add(User(email="s@test.example", name="S", role="supervisor", password_hash="x"))
+    with pytest.raises(IntegrityError):
+        db.commit()
+    db.rollback()
+    org = Organization(name="Harbour Care")
+    db.add(org)
+    db.flush()
+    db.add(User(email="a@test.example", name="A", role="admin", password_hash="x", organization_id=org.id))
+    with pytest.raises(IntegrityError):
+        db.commit()

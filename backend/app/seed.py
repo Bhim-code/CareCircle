@@ -6,11 +6,17 @@ Run it once on an empty database. To start again from nothing:
     alembic downgrade base && alembic upgrade head && python -m app.seed
 (The access log is append-only, so demo accounts are never deleted one by one.)
 
-Creates (password for all: demo1234):
-    patient     ana@demo.carecircle.test     (+ bob@ as a second patient)
-    caregiver   sam@demo.carecircle.test     (linked to Ana)
-    supervisor  sue@demo.carecircle.test     (read only, admin panel)
-    admin       al@demo.carecircle.test      (admin panel)
+Creates two companies (password for every account: demo1234):
+
+  Harbour Home Care
+    patients    ana@ and bob@demo.carecircle.test
+    caregiver   sam@demo.carecircle.test     (looks after Ana)
+    supervisor  sue@demo.carecircle.test     (admin panel, sees Harbour Home Care only)
+  Northside Care
+    patient     cara@demo.carecircle.test
+    caregiver   dan@demo.carecircle.test     (looks after Cara)
+    supervisor  nina@demo.carecircle.test    (admin panel, sees Northside Care only)
+  admin         al@demo.carecircle.test      (admin panel, every company)
 and two weeks of medicines, reminders (some missed), documents and records.
 Never run this against a database with real people in it.
 """
@@ -27,6 +33,7 @@ from app.core.config import get_settings
 from app.core.security import hash_password
 from app.db.models import (
     CareLink,
+    Organization,
     HealthDocument,
     Medicine,
     RecordEntry,
@@ -41,9 +48,11 @@ PASSWORD = "demo1234"
 TZ = "America/St_Johns"
 
 
-def _user(db: Session, name: str, role: str, password_hash: str) -> User:
+def _user(db: Session, name: str, role: str, password_hash: str,
+          company: Organization | None = None) -> User:
     user = User(email=f"{name.split()[0].lower()}@{DOMAIN}", name=name, role=role,
-                password_hash=password_hash, timezone=TZ)
+                password_hash=password_hash, timezone=TZ,
+                organization_id=company.id if company else None)
     db.add(user)
     db.flush()
     db.add(UserPreferences(user_id=user.id))
@@ -63,18 +72,26 @@ def seed() -> None:
         if db.scalar(select(User.id).where(User.email.like(f"%@{DOMAIN}")).limit(1)):
             sys.exit("Demo data is already loaded. To reload: alembic downgrade base && "
                      "alembic upgrade head && python -m app.seed")
-        ana = _user(db, "Ana Patient", "patient", password_hash)
-        bob = _user(db, "Bob Fisher", "patient", password_hash)
-        sam = _user(db, "Sam Caregiver", "caregiver", password_hash)
-        _user(db, "Sue Supervisor", "supervisor", password_hash)
+        harbour, northside = Organization(name="Harbour Home Care"), Organization(name="Northside Care")
+        db.add_all([harbour, northside])
+        db.flush()
+        ana = _user(db, "Ana Patient", "patient", password_hash, harbour)
+        bob = _user(db, "Bob Fisher", "patient", password_hash, harbour)
+        sam = _user(db, "Sam Caregiver", "caregiver", password_hash, harbour)
+        _user(db, "Sue Supervisor", "supervisor", password_hash, harbour)
+        cara = _user(db, "Cara Walsh", "patient", password_hash, northside)
+        dan = _user(db, "Dan Caregiver", "caregiver", password_hash, northside)
+        _user(db, "Nina Supervisor", "supervisor", password_hash, northside)
         _user(db, "Al Admin", "admin", password_hash)
+        db.add(CareLink(patient_id=cara.id, caregiver_id=dan.id, invited_email=dan.email,
+                        status="active", accepted_at=now - timedelta(days=10)))
 
         db.add(CareLink(patient_id=ana.id, caregiver_id=sam.id, invited_email=sam.email,
                         status="active", accepted_at=now - timedelta(days=20)))
 
         long_ago = now - timedelta(days=30)
         plans = [(ana, "Metformin", ["08:00", "20:00"]), (ana, "Lisinopril", ["09:00"]),
-                 (bob, "Atorvastatin", ["21:00"])]
+                 (bob, "Atorvastatin", ["21:00"]), (cara, "Levothyroxine", ["07:30"])]
         for patient, name, times in plans:
             medicine = Medicine(patient_id=patient.id, name=name, times=times,
                                 start_date=today - timedelta(days=14), created_at=long_ago)
@@ -99,12 +116,16 @@ def seed() -> None:
             HealthDocument(patient_id=ana.id, title="Hospital discharge letter", category="discharge_summary",
                            recorded_on=today - timedelta(days=95)),
             HealthDocument(patient_id=ana.id, title="Old clinic notes", category="other"),
+            HealthDocument(patient_id=cara.id, title="Thyroid blood test", category="lab_report",
+                           recorded_on=today - timedelta(days=20)),
             HealthDocument(patient_id=bob.id, title="Chest X-ray", category="imaging",
                            recorded_on=today - timedelta(days=5)),
         ])
 
-        def entry(author: User, kind: str, title: str, notes: str, hours_ago: int, **extra) -> None:
-            db.add(RecordEntry(patient_id=ana.id, kind=kind, client_name="Ana Patient", title=title,
+        def entry(author: User, kind: str, title: str, notes: str, hours_ago: int,
+                  patient: User | None = None, **extra) -> None:
+            patient = patient or ana
+            db.add(RecordEntry(patient_id=patient.id, kind=kind, client_name=patient.name, title=title,
                                notes=notes, occurred_at=now - timedelta(hours=hours_ago),
                                recorded_by=author.id, **extra))
 
@@ -117,11 +138,17 @@ def seed() -> None:
         entry(ana, "medical", "Dizzy in the morning", "Felt light-headed for ten minutes after getting up.", 30)
         entry(ana, "medication", "Missed evening dose", "Fell asleep early and missed the 20:00 dose.", 70,
               medicine_name="Metformin")
+        entry(dan, "behavioural", "Evening visit", "Watched the news together, in good spirits.", 20,
+              patient=cara, mood="calm")
         db.commit()
 
     print(f"Demo data loaded. Every demo account uses the password {PASSWORD!r}:")
-    for who in ("ana (patient)", "bob (patient)", "sam (caregiver)", "sue (supervisor)", "al (admin)"):
-        print(f"  {who.split()[0]}@{DOMAIN}  {who.split()[1]}")
+    for who in ("ana patient, Harbour Home Care", "bob patient, Harbour Home Care",
+                "sam caregiver, Harbour Home Care", "sue supervisor, Harbour Home Care",
+                "cara patient, Northside Care", "dan caregiver, Northside Care",
+                "nina supervisor, Northside Care", "al admin, every company"):
+        first, rest = who.split(" ", 1)
+        print(f"  {first}@{DOMAIN}  ({rest})")
 
 
 if __name__ == "__main__":

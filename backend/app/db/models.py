@@ -63,6 +63,22 @@ def _user_fk(nullable: bool = False, ondelete: str = "CASCADE") -> Mapped:
                          nullable=nullable)
 
 
+# --- Companies ---------------------------------------------------------------
+
+class Organization(Base):
+    """A care company. Its supervisors see only its own clients and caregivers."""
+
+    __tablename__ = "organizations"
+    __table_args__ = (
+        CheckConstraint("length(trim(name)) > 0", name="organizations_name_not_blank"),
+        Index("organizations_name_unique", text("lower(name)"), unique=True),
+    )
+
+    id: Mapped[uuid.UUID] = _id()
+    name: Mapped[str] = mapped_column(String(SHORT_TEXT), nullable=False)
+    created_at: Mapped[datetime] = _created()
+
+
 # --- People and sign-in ------------------------------------------------------
 
 class User(Base):
@@ -72,6 +88,11 @@ class User(Base):
         CheckConstraint("email = lower(email)", name="users_email_lowercase"),
         CheckConstraint("length(trim(name)) > 0", name="users_name_not_blank"),
         UniqueConstraint("email", name="users_email_unique"),
+        # An active supervisor always belongs to a company; an admin never does (admins are global).
+        CheckConstraint("role <> 'supervisor' OR organization_id IS NOT NULL OR NOT is_active",
+                        name="users_supervisor_has_company"),
+        CheckConstraint("role <> 'admin' OR organization_id IS NULL", name="users_admin_is_global"),
+        Index("users_organization_idx", "organization_id"),
     )
 
     id: Mapped[uuid.UUID] = _id()
@@ -82,6 +103,10 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     # IANA name such as "America/St_Johns". Medicine times are in this zone.
     timezone: Mapped[str] = mapped_column(String(64), nullable=False, server_default="UTC")
+    # The care company this person belongs to. Only an admin can set it.
+    organization_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="RESTRICT",
+                                       name="users_organization_id_fkey"))
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False,
                                                  server_default=func.now(), onupdate=func.now())

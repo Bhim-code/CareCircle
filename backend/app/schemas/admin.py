@@ -1,6 +1,8 @@
 import uuid
 from datetime import date
-from typing import Generic, Literal, TypeVar
+from typing import Annotated, Generic, Literal, TypeVar
+
+from pydantic import StringConstraints
 
 from app.schemas.base import CamelModel
 from app.schemas.common import PersonWithEmailOut, UtcDateTime
@@ -23,7 +25,25 @@ class RemindersToday(CamelModel):
     upcoming: int
 
 
+class CompanyRef(CamelModel):
+    id: uuid.UUID
+    name: str
+
+
+class CompanyOut(CompanyRef):
+    patients: int
+    caregivers: int
+    supervisors: int
+    created_at: UtcDateTime
+
+
+class CompanyIn(CamelModel):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+
+
 class OverviewOut(CamelModel):
+    # The company these numbers cover (a supervisor's own); null = every company (admin).
+    company: CompanyRef | None
     patients: int
     caregivers: int
     active_links: int
@@ -40,12 +60,31 @@ class AdminUserOut(CamelModel):
     role: str
     is_active: bool
     timezone: str
+    company: CompanyRef | None = None
     created_at: UtcDateTime
 
 
 class UserUpdateIn(CamelModel):
-    is_active: bool
+    """Admin only. Send either or both. organizationId: null removes the person from a company."""
 
+    is_active: bool | None = None
+    organization_id: uuid.UUID | None = None
+
+
+class CaregiverPatientOut(CamelModel):
+    id: uuid.UUID
+    name: str
+    email: str
+    linked_since: UtcDateTime | None
+    adherence_last_7_days: float | None
+
+
+class CaregiverDetailOut(CamelModel):
+    caregiver: AdminUserOut
+    patients: list[CaregiverPatientOut]
+    # Linked patients who belong to another company (names hidden from supervisors).
+    other_company_patients: int
+    entries_written_last_7_days: int
 
 class AdminMedicineOut(CamelModel):
     id: uuid.UUID

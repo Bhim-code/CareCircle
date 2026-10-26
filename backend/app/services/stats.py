@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.security import utcnow
-from app.db.models import Reminder
+from app.db.models import Reminder, User
 
 
 def missed_after() -> timedelta:
@@ -28,8 +28,17 @@ def reminder_status(scheduled_at: datetime, acknowledged_at: datetime | None,
     return "missed"
 
 
+def _in_company(query, organization_id: uuid.UUID | None):
+    """Limit a reminders query to patients of one company (None = everyone)."""
+    if organization_id is None:
+        return query
+    return query.where(Reminder.patient_id.in_(
+        select(User.id).where(User.organization_id == organization_id)))
+
+
 def reminder_counts(db: Session, start: datetime, end: datetime,
-                    patient_id: uuid.UUID | None = None) -> dict[str, int]:
+                    patient_id: uuid.UUID | None = None,
+                    organization_id: uuid.UUID | None = None) -> dict[str, int]:
     now = utcnow()
     taken = Reminder.acknowledged_at.is_not(None)
     open_ = Reminder.acknowledged_at.is_(None)
@@ -43,11 +52,13 @@ def reminder_counts(db: Session, start: datetime, end: datetime,
     ).where(Reminder.scheduled_at >= start, Reminder.scheduled_at < end)
     if patient_id:
         query = query.where(Reminder.patient_id == patient_id)
+    query = _in_company(query, organization_id)
     total, taken_n, missed, due, upcoming = db.execute(query).one()
     return {"total": total, "taken": taken_n, "missed": missed, "due": due, "upcoming": upcoming}
 
 
-def adherence(db: Session, days: int = 7, patient_id: uuid.UUID | None = None) -> float | None:
+def adherence(db: Session, days: int = 7, patient_id: uuid.UUID | None = None,
+              organization_id: uuid.UUID | None = None) -> float | None:
     """Confirmed doses / doses whose confirmation window has closed, over the last N days."""
     now = utcnow()
     closed = Reminder.scheduled_at + missed_after() <= now
@@ -57,5 +68,6 @@ def adherence(db: Session, days: int = 7, patient_id: uuid.UUID | None = None) -
     ).where(Reminder.scheduled_at >= now - timedelta(days=days), closed)
     if patient_id:
         query = query.where(Reminder.patient_id == patient_id)
+    query = _in_company(query, organization_id)
     total, taken = db.execute(query).one()
     return round((taken or 0) / total, 3) if total else None

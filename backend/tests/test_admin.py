@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy import select
 
 from app.db.models import AccessLog, Medicine, Reminder
-from tests.helpers import link, sign_up, staff
+from tests.helpers import join_company, link, sign_up, staff
 from tests.test_entries import entry
 
 
@@ -33,8 +33,10 @@ def world(client, db):
         Reminder(patient_id=med.patient_id, medicine_id=med.id, scheduled_at=now - timedelta(minutes=10)),
     ])
     db.commit()
-    sup = staff(client, "supervisor", "Sue")
+    sup = staff(client, "supervisor", "Sue")  # company "Harbour Care"
     adm = staff(client, "admin", "Al")
+    for person in (ana, bob, sam):
+        join_company(person)
     return {"ana": ana, "bob": bob, "sam": sam, "sup": sup, "adm": adm}
 
 
