@@ -1,4 +1,4 @@
-import { env, isSupabaseConfigured } from './config/env';
+import { env, isApiConfigured, isSupabaseConfigured } from './config/env';
 import { Platform } from 'react-native';
 import type { IAlarmScheduler } from './domain/services/IAlarmScheduler';
 import type { IAuthService } from './domain/services/IAuthService';
@@ -15,6 +15,11 @@ import { DemoReminderService } from './infrastructure/demo/DemoReminderService';
 import { NotifyKitAlarmScheduler } from './infrastructure/notifications/NotifyKitAlarmScheduler';
 import { NoopAlarmScheduler } from './infrastructure/notifications/NoopAlarmScheduler';
 import { AsyncPreferencesStore } from './infrastructure/storage/AsyncPreferencesStore';
+import { ApiClient } from './infrastructure/http/ApiClient';
+import { HttpAuthService } from './infrastructure/http/HttpAuthService';
+import { HttpReminderService } from './infrastructure/http/HttpReminderService';
+import { SkippedDoseStore } from './infrastructure/http/SkippedDoseStore';
+import { TokenStore } from './infrastructure/http/TokenStore';
 import { AsyncSessionStorage } from './infrastructure/storage/AsyncSessionStorage';
 import { EmptyRecordEntryService } from './infrastructure/supabase/EmptyRecordEntryService';
 import { EmptyReminderService } from './infrastructure/supabase/EmptyReminderService';
@@ -33,7 +38,7 @@ export interface Container {
 
 /** True when the in-memory demo backend should be used. Never true in a release build. */
 function shouldUseDemo(): boolean {
-  return __DEV__ && (env.demoMode || !isSupabaseConfigured);
+  return __DEV__ && (env.demoMode || (!isApiConfigured && !isSupabaseConfigured));
 }
 
 /**
@@ -49,10 +54,13 @@ export function createContainer(): Container {
   let authService: IAuthService;
   if (useDemo) {
     authService = new DemoAuthService();
+  } else if (isApiConfigured) {
+    // The CareCircle backend (backend/). It wins over the older Supabase setup when both are set.
+    authService = new HttpAuthService(createApiClient());
   } else {
     if (!isSupabaseConfigured) {
       throw new Error(
-        'Missing EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_ANON_KEY. See .env.example.',
+        'Missing EXPO_PUBLIC_API_URL (the CareCircle backend). See .env.example.',
       );
     }
     const client = createSupabaseClient(
@@ -90,10 +98,15 @@ export function createPreferencesStore(): IPreferencesStore {
 
 /**
  * Reminders follow the same choice as the rest of the app: made-up demo
- * reminders in development, otherwise the real backend (not built yet, so empty).
+ * reminders in development, the CareCircle backend when its address is set,
+ * otherwise nothing (an empty list).
  */
 export function createReminderService(): IReminderService {
-  return shouldUseDemo() ? new DemoReminderService() : new EmptyReminderService();
+  if (shouldUseDemo()) return new DemoReminderService();
+  if (isApiConfigured) {
+    return new HttpReminderService(createApiClient(), new SkippedDoseStore(new AsyncSessionStorage()));
+  }
+  return new EmptyReminderService();
 }
 
 /**
@@ -119,4 +132,24 @@ export function createRecordEntryService(): IRecordEntryService {
  */
 export function createAlarmScheduler(): IAlarmScheduler {
   return Platform.OS === 'web' ? new NoopAlarmScheduler() : new NotifyKitAlarmScheduler();
+}
+
+let sharedApiClient: ApiClient | null = null;
+
+/**
+ * The one connection to the CareCircle backend. Every service that talks to the
+ * backend gets this same object, because it makes sure only one token renewal runs
+ * at a time. Use `api.onSessionExpired(...)` to react when the sign-in ends.
+ */
+export function createApiClient(): ApiClient {
+  if (!isApiConfigured) {
+    throw new Error('Missing EXPO_PUBLIC_API_URL, the address of the backend. See .env.example.');
+  }
+  if (!sharedApiClient) {
+    sharedApiClient = new ApiClient({
+      baseUrl: env.apiUrl,
+      tokens: new TokenStore(new AsyncSessionStorage()),
+    });
+  }
+  return sharedApiClient;
 }
