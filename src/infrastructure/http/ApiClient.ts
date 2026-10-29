@@ -1,5 +1,5 @@
 import { ApiError } from './ApiError';
-import type { TokenStore } from './TokenStore';
+import type { ApiTokens, TokenStore } from './TokenStore';
 
 export type QueryValue = string | number | boolean | null | undefined;
 
@@ -24,7 +24,7 @@ export interface ApiClientOptions {
   readonly fetch?: typeof fetch;
   /** Default time limit for one call. */
   readonly timeoutMs?: number;
-  /** Called once when the sign-in can no longer be renewed, so the app can show the sign-in screen. */
+  /** Called when the sign-in can no longer be renewed. More listeners can join with onSessionExpired(). */
   readonly onSessionExpired?: () => void;
 }
 
@@ -93,7 +93,7 @@ export class ApiClient {
   private readonly tokens: TokenStore;
   private readonly fetchFn: typeof fetch;
   private readonly timeoutMs: number;
-  private readonly onSessionExpired: (() => void) | undefined;
+  private readonly expiredListeners = new Set<() => void>();
   private refreshing: Promise<string> | null = null;
 
   constructor(options: ApiClientOptions) {
@@ -101,7 +101,33 @@ export class ApiClient {
     this.tokens = options.tokens;
     this.fetchFn = options.fetch ?? ((input, init) => fetch(input, init));
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-    this.onSessionExpired = options.onSessionExpired;
+    if (options.onSessionExpired) this.expiredListeners.add(options.onSessionExpired);
+  }
+
+  /**
+   * Runs `listener` when the sign-in can no longer be renewed (the refresh token was
+   * refused), so the app can go back to the sign-in screen. Returns a way to stop listening.
+   */
+  onSessionExpired(listener: () => void): () => void {
+    this.expiredListeners.add(listener);
+    return () => {
+      this.expiredListeners.delete(listener);
+    };
+  }
+
+  /** True when there are saved tokens, meaning someone signed in earlier. */
+  async hasSession(): Promise<boolean> {
+    return (await this.tokens.get()) !== null;
+  }
+
+  /** Keeps the tokens a sign-in or sign-up gave us. */
+  saveTokens(tokens: ApiTokens): Promise<void> {
+    return this.tokens.set(tokens);
+  }
+
+  /** Forgets the tokens (sign-out). Does not call the server and does not notify listeners. */
+  forgetTokens(): Promise<void> {
+    return this.tokens.clear();
   }
 
   get<T>(path: string, options?: Omit<RequestOptions, 'body'>): Promise<T> {
@@ -169,7 +195,7 @@ export class ApiClient {
       // server fault keep the tokens, so the person is not signed out for a bad moment.
       if (error instanceof ApiError && error.status === 401) {
         await this.tokens.clear();
-        this.onSessionExpired?.();
+        for (const listener of [...this.expiredListeners]) listener();
         throw this.sessionEnded();
       }
       throw error;
