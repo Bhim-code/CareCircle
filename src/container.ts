@@ -1,4 +1,4 @@
-import { env, isSupabaseConfigured } from './config/env';
+import { env, isApiConfigured, isSupabaseConfigured } from './config/env';
 import { Platform } from 'react-native';
 import type { IAlarmScheduler } from './domain/services/IAlarmScheduler';
 import type { IAuthService } from './domain/services/IAuthService';
@@ -15,6 +15,8 @@ import { DemoReminderService } from './infrastructure/demo/DemoReminderService';
 import { NotifyKitAlarmScheduler } from './infrastructure/notifications/NotifyKitAlarmScheduler';
 import { NoopAlarmScheduler } from './infrastructure/notifications/NoopAlarmScheduler';
 import { AsyncPreferencesStore } from './infrastructure/storage/AsyncPreferencesStore';
+import { ApiClient } from './infrastructure/http/ApiClient';
+import { TokenStore } from './infrastructure/http/TokenStore';
 import { AsyncSessionStorage } from './infrastructure/storage/AsyncSessionStorage';
 import { EmptyRecordEntryService } from './infrastructure/supabase/EmptyRecordEntryService';
 import { EmptyReminderService } from './infrastructure/supabase/EmptyReminderService';
@@ -119,4 +121,22 @@ export function createRecordEntryService(): IRecordEntryService {
  */
 export function createAlarmScheduler(): IAlarmScheduler {
   return Platform.OS === 'web' ? new NoopAlarmScheduler() : new NotifyKitAlarmScheduler();
+}
+
+/**
+ * The one connection to the CareCircle backend. Build it once and give the same
+ * object to every service that talks to the backend: they must share it, because
+ * it makes sure only one token renewal runs at a time.
+ *
+ * `onSessionExpired` is called when the sign-in can no longer be renewed.
+ */
+export function createApiClient(onSessionExpired?: () => void): ApiClient {
+  if (!isApiConfigured) {
+    throw new Error('Missing EXPO_PUBLIC_API_URL, the address of the backend. See .env.example.');
+  }
+  return new ApiClient({
+    baseUrl: env.apiUrl,
+    tokens: new TokenStore(new AsyncSessionStorage()),
+    onSessionExpired,
+  });
 }
