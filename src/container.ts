@@ -17,6 +17,8 @@ import { NoopAlarmScheduler } from './infrastructure/notifications/NoopAlarmSche
 import { AsyncPreferencesStore } from './infrastructure/storage/AsyncPreferencesStore';
 import { ApiClient } from './infrastructure/http/ApiClient';
 import { HttpAuthService } from './infrastructure/http/HttpAuthService';
+import { HttpReminderService } from './infrastructure/http/HttpReminderService';
+import { SkippedDoseStore } from './infrastructure/http/SkippedDoseStore';
 import { TokenStore } from './infrastructure/http/TokenStore';
 import { AsyncSessionStorage } from './infrastructure/storage/AsyncSessionStorage';
 import { EmptyRecordEntryService } from './infrastructure/supabase/EmptyRecordEntryService';
@@ -96,10 +98,15 @@ export function createPreferencesStore(): IPreferencesStore {
 
 /**
  * Reminders follow the same choice as the rest of the app: made-up demo
- * reminders in development, otherwise the real backend (not built yet, so empty).
+ * reminders in development, the CareCircle backend when its address is set,
+ * otherwise nothing (an empty list).
  */
 export function createReminderService(): IReminderService {
-  return shouldUseDemo() ? new DemoReminderService() : new EmptyReminderService();
+  if (shouldUseDemo()) return new DemoReminderService();
+  if (isApiConfigured) {
+    return new HttpReminderService(createApiClient(), new SkippedDoseStore(new AsyncSessionStorage()));
+  }
+  return new EmptyReminderService();
 }
 
 /**
