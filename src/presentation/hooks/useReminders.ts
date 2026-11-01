@@ -5,7 +5,14 @@ import type { IReminderService } from '../../domain/services/IReminderService';
 export type RemindersStatus = 'loading' | 'ready' | 'error';
 
 /** Loads one person's reminders for one day. Lets the screen try again and confirm a dose. */
-export function useReminders(service: IReminderService, userId: string, day: string, enabled = true) {
+export function useReminders(
+  service: IReminderService,
+  userId: string,
+  day: string,
+  enabled = true,
+  /** Changes when the doses may have changed (a medicine was added or stopped), to load them again. */
+  refreshKey = 0,
+) {
   const [status, setStatus] = useState<RemindersStatus>('loading');
   const [reminders, setReminders] = useState<readonly Reminder[]>([]);
   const [attempt, setAttempt] = useState(0);
@@ -29,7 +36,7 @@ export function useReminders(service: IReminderService, userId: string, day: str
     return () => {
       active = false;
     };
-  }, [service, userId, day, enabled, attempt]);
+  }, [service, userId, day, enabled, attempt, refreshKey]);
 
   const retry = useCallback(() => setAttempt((count) => count + 1), []);
 

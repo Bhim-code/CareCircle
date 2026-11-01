@@ -1,8 +1,9 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
-import React from 'react';
+import React, { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { formatDate, formatTime, reminderStatus, sortByTime, STATUS_LABEL } from '@/application/reminders';
+import { isMedicineActive, medicineDatesText, scheduleText, sortMedicines } from '@/application/medicines';
+import { dayKey, formatDate, formatTime, reminderStatus, sortByTime, STATUS_LABEL } from '@/application/reminders';
 import { AppText } from '@/presentation/components/AppText';
 import { Banner } from '@/presentation/components/Banner';
 import { Button } from '@/presentation/components/Button';
@@ -11,6 +12,7 @@ import { Card } from '@/presentation/components/Card';
 import { Screen } from '@/presentation/components/Screen';
 import { StatusPill } from '@/presentation/components/StatusPill';
 import { useNow } from '@/presentation/hooks/useNow';
+import { useMedicineList } from '@/presentation/providers/MedicinesProvider';
 import { useTodaysReminders } from '@/presentation/providers/RemindersProvider';
 import { colors, radius, spacing } from '@/presentation/theme/theme';
 
@@ -29,6 +31,7 @@ export default function MedicationsScreen() {
       {/* Only patients have reminders, so only they get the part that shows them. */}
       <Can permission="reminders.manage" showMessage>
         <ReminderList />
+        <MyMedicines />
       </Can>
     </Screen>
   );
@@ -91,7 +94,92 @@ function ReminderList() {
   );
 }
 
+function MyMedicines() {
+  const now = useNow();
+  const { status, medicines, retry, stop } = useMedicineList();
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const [stoppingId, setStoppingId] = useState<string | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
+  const today = dayKey(now);
+
+  async function handleStop(id: string) {
+    setStoppingId(id);
+    setFailure(null);
+    const result = await stop(id);
+    setStoppingId(null);
+    setConfirming(null);
+    if (!result.ok) setFailure(result.message);
+  }
+
+  return (
+    <View style={styles.section}>
+      <AppText variant="heading" style={styles.sectionTitle}>
+        My medicines
+      </AppText>
+      <Button label="Add a medicine" onPress={() => router.push('/medications/add')} />
+
+      {failure ? <Banner tone="error">{failure}</Banner> : null}
+
+      {status === 'loading' ? (
+        <AppText color={colors.inkSoft} accessibilityLiveRegion="polite">
+          Loading your medicines…
+        </AppText>
+      ) : null}
+      {status === 'error' ? (
+        <>
+          <Banner tone="error">We could not load your medicines. Please try again.</Banner>
+          <Button label="Try again" variant="secondary" onPress={retry} />
+        </>
+      ) : null}
+      {status === 'ready' && medicines.length === 0 ? (
+        <AppText color={colors.inkSoft}>You have not added any medicines yet.</AppText>
+      ) : null}
+
+      {status === 'ready'
+        ? sortMedicines(medicines, today).map((medicine) => {
+            const active = isMedicineActive(medicine, today);
+            return (
+              <View key={medicine.id} style={[styles.medicine, !active && styles.inactive]}>
+                <AppText variant="heading">{medicine.name}</AppText>
+                <AppText>{scheduleText(medicine.times)}</AppText>
+                <AppText color={colors.inkSoft}>{medicineDatesText(medicine, today)}</AppText>
+                {active ? (
+                  confirming === medicine.id ? (
+                    <View style={styles.confirm}>
+                      <AppText variant="label">Stop {medicine.name}? You will no longer get reminders for it.</AppText>
+                      <Button
+                        label="Yes, stop it"
+                        variant="danger"
+                        loading={stoppingId === medicine.id}
+                        onPress={() => handleStop(medicine.id)}
+                      />
+                      <Button label="Keep it" variant="secondary" onPress={() => setConfirming(null)} />
+                    </View>
+                  ) : (
+                    <Button label={`Stop ${medicine.name}`} variant="secondary" onPress={() => setConfirming(medicine.id)} />
+                  )
+                ) : null}
+              </View>
+            );
+          })
+        : null}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  section: { marginTop: spacing.xl, gap: spacing.md },
+  sectionTitle: { marginBottom: spacing.xs },
+  medicine: {
+    backgroundColor: colors.paper,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    padding: spacing.lg,
+    gap: spacing.sm,
+  },
+  inactive: { opacity: 0.7 },
+  confirm: { gap: spacing.sm },
   title: { marginTop: spacing.sm, marginBottom: spacing.xs },
   date: { marginBottom: spacing.lg },
   row: {
