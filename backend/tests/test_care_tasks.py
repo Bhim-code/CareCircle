@@ -324,10 +324,17 @@ def test_caregiver_plans_only_for_linked_clients_and_changes_only_own_tasks(clie
     mine = client.post("/tasks/plan", json={"title": "Puzzle time"}, headers=sam.auth).json()
     assert client.patch(f"/tasks/plan/{supervisors_task['id']}", json={"title": "x"},
                         headers=sam.auth).status_code == 403
-    assert client.delete(f"/tasks/plan/{supervisors_task['id']}", headers=sam.auth).status_code == 403
     moved = client.patch(f"/tasks/plan/{mine['id']}", json={"time": "16:00"}, headers=sam.auth)
     assert moved.status_code == 200 and moved.json()["createdBy"]["name"] == "Sam"
-    assert client.delete(f"/tasks/plan/{moved.json()['id']}", headers=sam.auth).status_code == 204
+    # Caregivers cannot remove tasks, not even their own, and cannot end them by date.
+    assert client.delete(f"/tasks/plan/{moved.json()['id']}", headers=sam.auth).status_code == 405
+    ended = client.patch(f"/tasks/plan/{moved.json()['id']}", json={"endDate": str(date.today())},
+                         headers=sam.auth)
+    assert ended.status_code == 403 and ended.json()["error"]["code"] == "supervisor_only"
+    titles = [t["title"] for t in client.get("/tasks/plan", headers=sam.auth).json()]
+    assert "Puzzle time" in titles
+    # The supervisor can remove it.
+    assert client.delete(f"/admin/tasks/{moved.json()['id']}", headers=sue.auth).status_code == 204
     # Eve (another client's caregiver, no permission) sees nothing of Ana's plan.
     assert client.get(f"/tasks/plan?patientId={team['ana'].id}", headers=eve.auth).status_code == 404
 

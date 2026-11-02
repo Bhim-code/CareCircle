@@ -94,9 +94,11 @@ default). Permissions: `tasks.view`, `tasks.complete`.
 - **Planning from the app** (only if a supervisor gave the person the `tasks.plan`
   permission; check `GET /me` `permissions`): `GET /tasks/plan?patientId=` lists the plan;
   `POST /tasks/plan` `{ "title", "time": "16:00" | null, "days": [1..7], "instructions"?,
-  "patientId"? }` adds a task for a linked client; `PATCH` / `DELETE /tasks/plan/{id}`
-  change or remove **tasks you added yourself** (403 `not_your_task` for others). Each
-  task has `createdBy`.
+  "patientId"? }` adds a task for a linked client; `PATCH /tasks/plan/{id}`
+  edits **tasks you added yourself** (403 `not_your_task` for others). Caregivers **cannot
+  remove tasks**: there is no delete in the app, and `endDate` cannot be changed (403
+  `supervisor_only`); only a supervisor removes tasks, in the admin panel. Each task has
+  `createdBy`.
 - When a task with a time is not marked by its deadline, the linked caregivers get an email
   (the job `python -m app.jobs`); supervisors too if it is still not marked 3 hours later.
 

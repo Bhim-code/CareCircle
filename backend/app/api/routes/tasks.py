@@ -300,23 +300,16 @@ def app_plan_add(body: CareTaskAppIn, me: CurrentUser = Depends(patient_or_careg
 @router.patch("/tasks/plan/{task_id}", response_model=CareTaskOut)
 def app_plan_change(task_id: uuid.UUID, body: CareTaskUpdateIn, me: CurrentUser = Depends(patient_or_caregiver),
                     db: Session = Depends(get_db)):
-    """Change a task you added (a new schedule starts a new version from now)."""
+    """Change a task you added (a new schedule starts a new version from now).
+    There is no delete here: only a supervisor removes tasks. For the same reason the
+    end date cannot be changed from the app (ending a task is removing it)."""
     _require(db, me, "tasks.plan")
     task, patient = _own_task(db, me, task_id)
+    if "end_date" in body.model_fields_set:
+        raise ApiError(403, "Only a supervisor can end or remove a task.", code="supervisor_only")
     current = plan_change(db, me.user, task, patient, body)
     db.commit()
     return tasks_out(db, [current])[0]
-
-
-@router.delete("/tasks/plan/{task_id}", status_code=204)
-def app_plan_remove(task_id: uuid.UUID, me: CurrentUser = Depends(patient_or_caregiver),
-                    db: Session = Depends(get_db)) -> Response:
-    """Remove a task you added, from now. Past days are kept."""
-    _require(db, me, "tasks.plan")
-    task, patient = _own_task(db, me, task_id)
-    plan_remove(db, me.user, task, patient)
-    db.commit()
-    return Response(status_code=204)
 
 
 # --- admin panel ---------------------------------------------------------------------
