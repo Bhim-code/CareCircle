@@ -113,6 +113,9 @@ const ACTION_LABEL = {
   'users.list': 'Listed accounts', 'user.deactivate': 'Turned off account',
   'user.activate': 'Turned on account', 'admin.denied': 'Tried to open the admin panel',
   'caregiver.view': 'Opened caregiver', 'user.company': 'Changed company',
+  'profile.view': 'Opened profile', 'role.assign': 'Changed role', 'permissions.grant': 'Changed permissions',
+  'documents.list': 'Viewed documents in the app', 'documents.upload': 'Uploaded a document',
+  'tasks.list': 'Viewed care tasks in the app', 'tasks.complete': 'Marked a care task', 'tasks.extra': 'Logged extra work',
   'admin.change.denied': 'Tried to change an account',
 };
 const STATUS_CLASS = { taken: 'text-taken', due: 'text-due', missed: 'text-missed', upcoming: 'text-upcoming' };
@@ -208,6 +211,7 @@ function shell(current, content) {
   const user = s && s.user;
   const nav = h('nav', { 'aria-label': 'Main', class: 'space-y-1' },
     navLink('#/overview', 'Overview', current),
+    can('tasks.view') ? navLink('#/today', 'Today', current) : null,
     can('people.view') ? navLink('#/people', 'People', current) : null,
     can('records.view') ? navLink('#/patients', 'Patients', current) : null,
     can('people.view') ? navLink('#/caregivers', 'Caregivers', current) : null,
@@ -373,7 +377,12 @@ async function overviewPage(root) {
     h('dd', { class: 'text-3xl font-bold' }, n), h('dt', { class: 'text-muted' }, label));
 
   const waiting = can('people.view') ? (await api('/admin/users?role=pending&pageSize=1')).total : 0;
+  const missedTasks = can('tasks.view')
+    ? (await api('/admin/today')).reduce((n, d) => n + d.counts.missed, 0) : 0;
   root.replaceChildren(shell('#/overview', [
+    missedTasks ? h('a', { href: '#/today?show=attention', class: 'mb-3 flex items-center justify-between gap-4 rounded-md border border-missed/40 bg-missed/5 px-4 py-3 text-missed hover:bg-missed/10' },
+      h('span', { class: 'font-bold' }, `${missedTasks} care ${missedTasks === 1 ? 'task was' : 'tasks were'} missed today`),
+      h('span', { class: 'underline underline-offset-2' }, 'Open Today')) : null,
     waiting ? h('a', { href: '#/people?role=pending', class: 'mb-6 flex items-center justify-between gap-4 rounded-md border border-due/40 bg-due/10 px-4 py-3 text-due hover:bg-due/15' },
       h('span', { class: 'font-bold' }, `${waiting} ${waiting === 1 ? 'person is' : 'people are'} waiting for a role`),
       h('span', { class: 'underline underline-offset-2' }, 'Assign roles')) : null,
@@ -910,7 +919,8 @@ async function companiesPage(root) {
 async function patientPage(root, patientId, tab) {
   const detail = await api(`/admin/patients/${encodeURIComponent(patientId)}`);
   const p = detail.patient;
-  const tabs = [['records', 'Records'], ['reminders', 'Reminders'], ['documents', 'Documents']];
+  const tabs = [['records', 'Records'], ['reminders', 'Reminders'], ['documents', 'Documents'],
+    ...(can('tasks.view') ? [['plan', 'Care plan']] : [])];
   const body = h('section', { class: 'mt-6' }, loading());
 
   const tabNav = h('nav', { 'aria-label': 'Patient data', class: 'mt-10 flex gap-6 border-b border-rule' },
@@ -938,7 +948,8 @@ async function patientPage(root, patientId, tab) {
     tabNav, body]));
 
   try {
-    if (tab === 'reminders') await remindersTab(body, p);
+    if (tab === 'plan') await carePlanTab(body, p);
+    else if (tab === 'reminders') await remindersTab(body, p);
     else if (tab === 'documents') await documentsTab(body, p);
     else await recordsTab(body, p);
   } catch (err) {
@@ -1019,12 +1030,210 @@ async function remindersTab(host, p) {
     h('div', { class: 'mt-6' }, table));
 }
 
+const fmtSize = (n) => n === null || n === undefined ? '' : n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`;
+
 async function documentsTab(host, p) {
   const docs = await api(`/admin/patients/${p.id}/documents`);
-  host.replaceChildren(docs.length ? h('ul', { class: 'divide-y divide-rule' }, docs.map((d) => h('li', { class: 'flex flex-wrap justify-between gap-2 py-4' },
-    h('span', {}, h('span', { class: 'font-bold' }, d.title), h('span', { class: 'ml-3 text-sm text-muted' }, CATEGORY_LABEL[d.category] || d.category)),
-    h('span', { class: 'text-muted' }, fmtDate(d.recordedOn)))))
+  host.replaceChildren(docs.length ? h('ul', { class: 'divide-y divide-rule' }, docs.map((d) => h('li', { class: `flex flex-wrap items-start justify-between gap-3 py-4 ${d.deletedAt ? 'opacity-60' : ''}` },
+    h('div', {},
+      h('div', {}, h('span', { class: 'font-bold' }, d.title), h('span', { class: 'ml-3 text-sm text-muted' }, CATEGORY_LABEL[d.category] || d.category),
+        d.deletedAt ? h('span', { class: 'ml-3 rounded-full bg-missed/10 px-2 py-0.5 text-xs font-bold text-missed' }, `Deleted ${fmtDate(d.deletedAt.slice(0, 10))}`) : null),
+      h('p', { class: 'mt-1 text-sm text-muted' },
+        d.uploadedBy ? `Uploaded by ${d.uploadedBy.name} (${d.uploadedBy.role}), ${fmtDateTime(d.uploadedAt)}` : 'Added without a file',
+        d.fileType ? `, ${d.fileType === 'pdf' ? 'PDF' : 'photo'} ${fmtSize(d.sizeBytes)}` : '')),
+    h('div', { class: 'flex items-center gap-4' },
+      h('span', { class: 'text-muted' }, fmtDate(d.recordedOn)),
+      d.fileUri ? h('a', { href: photoSrc(d.fileUri), target: '_blank', rel: 'noopener noreferrer',
+        class: 'font-bold text-sage-dark underline underline-offset-2' }, 'Open') : null))))
     : h('p', { class: 'py-10 text-muted' }, 'No documents for this patient.'));
+}
+
+// ---------------------------------------------------------------- care tasks
+
+const TASK_STATUS = {
+  done: ['Done', 'bg-taken/10 text-taken'], late: ['Done late', 'bg-due/10 text-due'],
+  skipped: ['Skipped', 'bg-upcoming/10 text-upcoming'], missed: ['Missed', 'bg-missed/10 text-missed'],
+  due: ['Due now', 'bg-due/10 text-due'], upcoming: ['Later', 'bg-rule text-muted'],
+};
+const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const SKIP_REASONS = ['Client refused', 'Client in hospital', 'Client away (family, appointment)', 'Not needed today'];
+
+function daysText(days) {
+  if (days.length === 7) return 'Every day';
+  if (days.join() === '1,2,3,4,5') return 'Weekdays';
+  if (days.join() === '6,7') return 'Weekends';
+  return days.map((d) => DAY_NAMES[d - 1]).join(', ');
+}
+
+function statusPill(status) {
+  const [label, cls] = TASK_STATUS[status];
+  return h('span', { class: `inline-block rounded-full px-2.5 py-0.5 text-sm font-bold ${cls}` }, label);
+}
+
+const isoToday = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
+
+/** Ask for a reason, then mark skipped. */
+function skipDialog(task, onDone, day) {
+  const dialog = h('dialog', { class: 'w-[min(28rem,calc(100%-2rem))] rounded-lg p-0 text-ink' });
+  const choice = h('select', { id: 'skip-reason', class: `${inputClass} w-full` }, SKIP_REASONS.map((r) => h('option', {}, r)), h('option', { value: '' }, 'Other (write below)'));
+  const note = h('textarea', { id: 'skip-note', rows: 2, maxlength: 200, class: `${inputClass} w-full` });
+  const msg = h('p', { role: 'alert', class: 'text-sm text-missed' });
+  dialog.append(h('form', { class: 'space-y-4 p-6', onsubmit: async (e) => {
+    e.preventDefault();
+    const reason = [choice.value, note.value.trim()].filter(Boolean).join(': ');
+    if (!reason) { msg.textContent = 'Say why it was not done.'; return; }
+    try {
+      await api(`/admin/tasks/${task.taskId}/complete`, { method: 'POST', body: { day, status: 'skipped', reason } });
+      dialog.close(); toast(`"${task.title}" marked as skipped.`); onDone();
+    } catch (err) { msg.textContent = err.message; }
+  } },
+  h('h2', { class: 'text-lg font-bold' }, `Skip "${task.title}"?`),
+  h('div', { class: 'flex flex-col gap-1' }, h('label', { for: 'skip-reason', class: 'font-bold' }, 'Reason'), choice),
+  h('div', { class: 'flex flex-col gap-1' }, h('label', { for: 'skip-note', class: 'text-sm text-muted' }, 'Details (optional)'), note),
+  msg,
+  h('div', { class: 'flex justify-end gap-3' },
+    h('button', { type: 'button', class: 'rounded-md px-4 py-2 hover:bg-paper', onclick: () => dialog.close() }, 'Cancel'),
+    h('button', { class: primaryClass }, 'Mark skipped'))));
+  dialog.addEventListener('close', () => dialog.remove());
+  document.body.append(dialog);
+  dialog.showModal();
+}
+
+function taskRow(t, day, onChange) {
+  const me = session.get().user;
+  const c = t.completion;
+  const who = c ? `${c.doneBy.name}, ${new Date(c.doneAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}` : null;
+  const actions = h('div', { class: 'flex flex-wrap justify-end gap-3 text-sm' });
+  if (can('tasks.complete')) {
+    if (!c && t.status !== 'upcoming') {
+      actions.append(
+        h('button', { class: 'font-bold text-sage-dark underline underline-offset-2', onclick: async () => {
+          try { await api(`/admin/tasks/${t.taskId}/complete`, { method: 'POST', body: { day } }); toast(`"${t.title}" marked as done.`); onChange(); }
+          catch (err) { toast(err.message); }
+        } }, 'Mark done'),
+        h('button', { class: 'underline underline-offset-2', onclick: () => skipDialog(t, onChange, day) }, 'Skip'));
+    } else if (!c && t.status === 'upcoming') {
+      actions.append(h('button', { class: 'text-muted underline underline-offset-2', onclick: async () => {
+        try { await api(`/admin/tasks/${t.taskId}/complete`, { method: 'POST', body: { day } }); toast(`"${t.title}" marked as done.`); onChange(); }
+        catch (err) { toast(err.message); }
+      } }, 'Mark done early'));
+    } else if (c && c.doneBy.id === me.id && Date.now() - new Date(c.doneAt).getTime() < 24 * 3600 * 1000) {
+      actions.append(h('button', { class: 'text-muted underline underline-offset-2', onclick: async () => {
+        try { await api(`/admin/tasks/${t.taskId}/complete?day=${day}`, { method: 'DELETE' }); toast('Undone.'); onChange(); }
+        catch (err) { toast(err.message); }
+      } }, 'Undo'));
+    }
+  }
+  return h('tr', { class: 'border-t border-rule align-top' },
+    h('td', { class: 'py-3 pr-4 whitespace-nowrap font-bold' }, t.time || 'Any time'),
+    h('td', { class: 'py-3 pr-4' }, h('div', { class: 'font-bold' }, t.title),
+      t.instructions ? h('div', { class: 'max-w-prose text-sm text-muted' }, t.instructions) : null),
+    h('td', { class: 'py-3 pr-4' }, statusPill(t.status)),
+    h('td', { class: 'py-3 pr-4 text-sm' },
+      c ? h('div', {}, who) : null,
+      c && c.reason ? h('div', { class: 'text-upcoming' }, c.reason) : null,
+      c && c.note ? h('div', { class: 'text-muted' }, c.note) : null),
+    h('td', { class: 'py-3' }, actions));
+}
+
+async function todayPage(root) {
+  const f = hashParams();
+  const day = f.day || isoToday();
+  const attention = f.show === 'attention';
+  const rows = await api(`/admin/today${query({ day: f.day })}`);
+  const dayInput = h('input', { type: 'date', value: day, max: isoToday(), 'aria-label': 'Day', class: inputClass });
+  dayInput.addEventListener('change', () => go(`#/today${query({ day: dayInput.value, show: f.show })}`));
+  const filter = h('div', { class: 'flex gap-2' }, [['', 'All tasks'], ['attention', 'Needs attention']].map(([v, l]) =>
+    h('a', { href: `#/today${query({ day: f.day, show: v })}`, 'aria-current': (f.show || '') === v ? 'page' : null,
+      class: `rounded-full border px-3 py-1 text-sm ${(f.show || '') === v ? 'border-sage bg-sage-soft font-bold text-sage-dark' : 'border-rule bg-white hover:border-sage'}` }, l)));
+  const total = rows.reduce((acc, r) => { for (const k of Object.keys(r.counts)) acc[k] = (acc[k] || 0) + r.counts[k]; return acc; }, {});
+  const summary = h('p', { class: 'mt-2 text-muted' },
+    rows.length ? `${total.done + total.late} done, ${total.skipped} skipped, ${total.missed} missed, ${total.due} due now, ${total.upcoming} later`
+      : 'No care tasks planned.');
+
+  const sections = rows.map((r) => {
+    const tasks = attention ? r.tasks.filter((t) => t.status === 'missed' || t.status === 'due') : r.tasks;
+    if (attention && !tasks.length) return null;
+    return h('section', { class: 'mt-8' },
+      h('div', { class: 'flex flex-wrap items-baseline justify-between gap-3 border-b border-rule pb-2' },
+        h('h2', { class: 'text-xl font-bold' }, can('records.view')
+          ? h('a', { href: `#/patients/${r.patient.id}/plan`, class: 'hover:text-sage-dark hover:underline' }, r.patient.name) : r.patient.name),
+        h('span', { class: 'text-sm text-muted' }, `${r.counts.done + r.counts.late} of ${r.tasks.length} done${r.counts.missed ? `, ${r.counts.missed} missed` : ''}`)),
+      tasks.length ? h('div', { class: 'overflow-x-auto' }, h('table', { class: 'w-full min-w-[44rem] table-fixed text-left' },
+        h('colgroup', {}, h('col', { class: 'w-24' }), h('col', {}), h('col', { class: 'w-32' }), h('col', { class: 'w-56' }), h('col', { class: 'w-40' })),
+        h('tbody', {}, tasks.map((t) => taskRow(t, r.day, render))))) : null,
+      !attention && r.extras.length ? h('div', { class: 'mt-3 rounded-md bg-sage-soft/60 px-4 py-3' },
+        h('h3', { class: 'text-sm font-bold text-sage-dark' }, 'Extra work (not in the plan)'),
+        h('ul', { class: 'mt-1 space-y-1 text-sm' }, r.extras.map((e) => h('li', {},
+          h('span', { class: 'font-bold' }, e.title), ` by ${e.doneBy.name}, ${new Date(e.doneAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`,
+          e.note ? h('span', { class: 'text-muted' }, ` (${e.note})`) : null)))) : null);
+  }).filter(Boolean);
+
+  root.replaceChildren(shell('#/today', [
+    pageTitle('Today', h('div', { class: 'flex flex-wrap items-center gap-3' }, filter, dayInput)),
+    summary,
+    sections.length ? sections : h('p', { class: 'py-10 text-muted' }, attention ? 'Nothing needs attention.' : 'Plan tasks from a client\'s Care plan tab (Patients, then a client).'),
+  ]));
+}
+
+async function carePlanTab(host, p) {
+  const tasks = await api(`/admin/patients/${p.id}/tasks`);
+  const editable = can('tasks.manage');
+  const list = tasks.length ? h('ul', { class: 'divide-y divide-rule' }, tasks.map((t) => h('li', { class: 'flex flex-wrap items-start justify-between gap-3 py-4' },
+    h('div', {},
+      h('div', {}, h('span', { class: 'mr-3 font-bold' }, t.time || 'Any time'), h('span', { class: 'font-bold' }, t.title)),
+      h('p', { class: 'text-sm text-muted' }, `${daysText(t.days)}, from ${fmtDate(t.startDate)}${t.endDate ? ` until ${fmtDate(t.endDate)}` : ''}${t.time ? `, missed after ${t.graceMinutes} min` : ''}`),
+      t.instructions ? h('p', { class: 'mt-1 max-w-prose text-sm' }, t.instructions) : null),
+    editable ? h('div', { class: 'flex gap-3 text-sm' },
+      h('button', { class: 'underline underline-offset-2', onclick: () => host.replaceChildren(taskForm(p, t, () => carePlanTab(host, p))) }, 'Change'),
+      h('button', { class: 'text-missed underline underline-offset-2', onclick: async () => {
+        const ok = await confirmAction(`Remove "${t.title}" from the plan?`, 'It stops from now. Past days and what was done are kept.', 'Remove task');
+        if (!ok) return;
+        try { await api(`/admin/tasks/${t.id}`, { method: 'DELETE' }); toast(`"${t.title}" removed.`); carePlanTab(host, p); } catch (err) { toast(err.message); }
+      } }, 'Remove')) : null)))
+    : h('p', { class: 'py-6 text-muted' }, 'No care tasks planned yet.');
+  host.replaceChildren(
+    h('div', { class: 'flex flex-wrap items-center justify-between gap-3' },
+      h('p', { class: 'text-muted' }, 'What should be done for this client, and when. Caregivers tick these off in the app.'),
+      editable ? h('button', { class: primaryClass, onclick: () => host.replaceChildren(taskForm(p, null, () => carePlanTab(host, p))) }, 'Add task') : null),
+    h('div', { class: 'mt-4' }, list),
+    h('p', { class: 'mt-4' }, h('a', { href: '#/today', class: 'text-sage-dark underline underline-offset-2' }, "See today's progress")));
+}
+
+function taskForm(p, task, done) {
+  const title = h('input', { id: 't-title', maxlength: 100, value: task ? task.title : '', class: `${inputClass} w-full` });
+  const time = h('input', { id: 't-time', type: 'time', value: task && task.time ? task.time : '', class: inputClass });
+  const grace = h('select', { id: 't-grace', class: inputClass }, [15, 30, 60, 120, 240].map((m) => h('option', { value: m, selected: (task ? task.graceMinutes : 60) === m ? true : null }, `${m} minutes`)));
+  const dayBoxes = DAY_NAMES.map((name, i) => {
+    const box = h('input', { type: 'checkbox', id: `t-day-${i + 1}`, value: i + 1, class: 'h-4 w-4 accent-[#2E6A5C]', checked: !task || task.days.includes(i + 1) ? true : null });
+    return [box, h('label', { for: `t-day-${i + 1}`, class: 'flex items-center gap-1.5' }, box, name)];
+  });
+  const instructions = h('textarea', { id: 't-instructions', rows: 3, maxlength: 2000, class: `${inputClass} w-full` }, task && task.instructions ? task.instructions : '');
+  const msg = h('p', { role: 'alert', class: 'text-sm text-missed' });
+  return h('form', { class: 'max-w-2xl space-y-4', novalidate: true, onsubmit: async (e) => {
+    e.preventDefault();
+    const days = dayBoxes.filter(([b]) => b.checked).map(([b]) => Number(b.value));
+    if (!title.value.trim()) { msg.textContent = 'Give the task a name.'; return; }
+    if (!days.length) { msg.textContent = 'Choose at least one day.'; return; }
+    const body = { title: title.value.trim(), instructions: instructions.value.trim() || null, time: time.value || null,
+      days, graceMinutes: Number(grace.value) };
+    try {
+      if (task) await api(`/admin/tasks/${task.id}`, { method: 'PATCH', body });
+      else await api(`/admin/patients/${p.id}/tasks`, { method: 'POST', body });
+      toast(task ? 'Task changed. A new time or days apply from now; past days keep the old plan.' : `"${body.title}" added to the plan.`);
+      done();
+    } catch (err) { msg.textContent = Object.values(err.fields || {})[0] || err.message; }
+  } },
+  h('h3', { class: 'text-lg font-bold' }, task ? `Change "${task.title}"` : 'Add a task'),
+  h('div', { class: 'flex flex-col gap-1' }, h('label', { for: 't-title', class: 'font-bold' }, 'Task'), title),
+  h('div', { class: 'flex flex-wrap gap-4' },
+    h('div', { class: 'flex flex-col gap-1' }, h('label', { for: 't-time', class: 'font-bold' }, 'Time (leave empty for any time)'), time),
+    h('div', { class: 'flex flex-col gap-1' }, h('label', { for: 't-grace', class: 'font-bold' }, 'Counts as missed after'), grace)),
+  h('fieldset', {}, h('legend', { class: 'mb-1 font-bold' }, 'Days'), h('div', { class: 'flex flex-wrap gap-4' }, dayBoxes.map(([, l]) => l))),
+  h('div', { class: 'flex flex-col gap-1' }, h('label', { for: 't-instructions', class: 'font-bold' }, 'Instructions for the caregiver (optional)'), instructions),
+  msg,
+  h('div', { class: 'flex gap-3' }, h('button', { class: primaryClass }, task ? 'Save changes' : 'Add task'),
+    h('button', { type: 'button', class: buttonClass, onclick: done }, 'Cancel')));
 }
 
 async function accessLogPage(root) {
@@ -1097,7 +1306,7 @@ async function render() {
   root.replaceChildren(shell(path, loading()));
   try {
     const profile = /^\/people\/([0-9a-f-]{36})$/i.exec(path);
-    const patient = /^\/patients\/([0-9a-f-]{36})(?:\/(records|reminders|documents))?$/i.exec(path);
+    const patient = /^\/patients\/([0-9a-f-]{36})(?:\/(records|reminders|documents|plan))?$/i.exec(path);
     const caregiver = /^\/caregivers\/([0-9a-f-]{36})$/i.exec(path);
     if (path === '/overview') await overviewPage(root);
     else if (path === '/patients') await peoplePage(root, { role: 'patient', title: 'Patients', route: '#/patients' });
@@ -1105,6 +1314,7 @@ async function render() {
     else if (path === '/people' || path === '/accounts') await peoplePage(root, { title: 'People', route: '#/people' });
     else if (profile) await profilePage(root, profile[1]);
     else if (path === '/roles') await rolesPage(root);
+    else if (path === '/today') await todayPage(root);
     else if (path === '/companies') await companiesPage(root);
     else if (caregiver) await caregiverPage(root, caregiver[1]);
     else if (path === '/access-log') await accessLogPage(root);

@@ -5,7 +5,7 @@ database; these classes must stay in step with them (a test checks this).
 """
 
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, time
 
 from sqlalchemy import (
     ARRAY,
@@ -18,8 +18,10 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    SmallInteger,
     String,
     Text,
+    Time,
     UniqueConstraint,
     func,
     text,
@@ -369,9 +371,21 @@ class AlertSent(Base):
 # --- Health documents --------------------------------------------------------
 
 class HealthDocument(Base):
+    """A patient's document. Since migration 0005 it can carry an uploaded file
+    (older rows are details only). Deleting hides it (deleted_at); the file is kept."""
+
     __tablename__ = "health_documents"
     __table_args__ = (
         CheckConstraint(_in("category", DOCUMENT_CATEGORIES), name="health_documents_category_valid"),
+        # A file's details are all there or all missing.
+        CheckConstraint("(file_key IS NULL) = (content_type IS NULL) AND (file_key IS NULL) = (size_bytes IS NULL)",
+                        name="health_documents_file_complete"),
+        CheckConstraint("content_type IS NULL OR content_type IN ('application/pdf', 'image/jpeg', 'image/png')",
+                        name="health_documents_type_valid"),
+        CheckConstraint("size_bytes IS NULL OR (size_bytes > 0 AND size_bytes <= 10485760)",
+                        name="health_documents_size_valid"),
+        CheckConstraint("(deleted_at IS NULL) = (deleted_by IS NULL)", name="health_documents_deleted_by"),
+        UniqueConstraint("file_key", name="health_documents_file_key_key"),
         Index("health_documents_patient_idx", "patient_id"),
     )
 
@@ -381,6 +395,15 @@ class HealthDocument(Base):
     category: Mapped[str] = mapped_column(String(30), nullable=False)
     recorded_on: Mapped[date | None] = mapped_column(Date)
     created_at: Mapped[datetime] = _created()
+    file_key: Mapped[str | None] = mapped_column(String(200))
+    content_type: Mapped[str | None] = mapped_column(String(40))
+    size_bytes: Mapped[int | None] = mapped_column(Integer)
+    file_name: Mapped[str | None] = mapped_column(String(100))
+    uploaded_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT", name="health_documents_uploaded_by_fkey"))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT", name="health_documents_deleted_by_fkey"))
 
 
 # --- Written records ---------------------------------------------------------
@@ -453,6 +476,92 @@ class EntryPhoto(Base):
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     storage_key: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
     created_at: Mapped[datetime] = _created()
+
+
+# --- Care plan: daily tasks -------------------------------------------------
+
+class CareTask(Base):
+    """Something to do for one client on certain days, planned by a supervisor.
+
+    A task's schedule never changes in place: changing it ends this task and starts a
+    new one, so every past day keeps the plan that applied that day.
+    """
+
+    __tablename__ = "care_tasks"
+    __table_args__ = (
+        CheckConstraint("length(trim(title)) > 0", name="care_tasks_title_not_blank"),
+        CheckConstraint("cardinality(days) BETWEEN 1 AND 7 AND days <@ ARRAY[1,2,3,4,5,6,7]::smallint[]",
+                        name="care_tasks_days_valid"),
+        CheckConstraint("end_date IS NULL OR end_date >= start_date", name="care_tasks_dates_order"),
+        CheckConstraint("grace_minutes BETWEEN 0 AND 720", name="care_tasks_grace_valid"),
+        Index("care_tasks_patient_idx", "patient_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _id()
+    patient_id: Mapped[uuid.UUID] = _user_fk()
+    title: Mapped[str] = mapped_column(String(SHORT_TEXT), nullable=False)
+    instructions: Mapped[str | None] = mapped_column(String(LONG_TEXT))
+    # Local time in the client's time zone; null = any time that day.
+    time_of_day: Mapped[time | None] = mapped_column(Time)
+    # ISO weekdays: 1 = Monday ... 7 = Sunday.
+    days: Mapped[list[int]] = mapped_column(ARRAY(SmallInteger), nullable=False)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date | None] = mapped_column(Date)
+    # How long after its time a task counts as missed.
+    grace_minutes: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("60"))
+    created_by: Mapped[uuid.UUID | None] = _user_fk(nullable=True, ondelete="SET NULL")
+    created_at: Mapped[datetime] = _created()
+    # Set when the task is removed from the plan (or replaced by a new schedule).
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    replaced_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("care_tasks.id", ondelete="SET NULL", name="care_tasks_replaced_by_fkey"))
+
+
+class TaskCompletion(Base):
+    """A planned task done or skipped on a day, or extra work done (no task)."""
+
+    __tablename__ = "task_completions"
+    __table_args__ = (
+        CheckConstraint("status IN ('done', 'skipped')", name="task_completions_status_valid"),
+        CheckConstraint("status <> 'skipped' OR length(trim(coalesce(reason, ''))) > 0",
+                        name="task_completions_skip_has_reason"),
+        CheckConstraint("task_id IS NOT NULL OR (status = 'done' AND length(trim(coalesce(title, ''))) > 0)",
+                        name="task_completions_extra_has_title"),
+        # Each planned task is done (or skipped) once per day.
+        Index("task_completions_once_per_day", "task_id", "day", unique=True,
+              postgresql_where=text("task_id IS NOT NULL")),
+        Index("task_completions_patient_day_idx", "patient_id", "day"),
+    )
+
+    id: Mapped[uuid.UUID] = _id()
+    patient_id: Mapped[uuid.UUID] = _user_fk()
+    task_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("care_tasks.id", ondelete="CASCADE"))
+    day: Mapped[date] = mapped_column(Date, nullable=False)
+    status: Mapped[str] = mapped_column(String(10), nullable=False)
+    reason: Mapped[str | None] = mapped_column(String(200))
+    title: Mapped[str | None] = mapped_column(String(SHORT_TEXT))  # extra work only
+    note: Mapped[str | None] = mapped_column(String(LONG_TEXT))
+    done_by: Mapped[uuid.UUID] = _user_fk(ondelete="RESTRICT")
+    done_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class TaskAlert(Base):
+    """One row per missed-task alert; the unique key makes "send once" a database rule."""
+
+    __tablename__ = "task_alerts"
+    __table_args__ = (
+        UniqueConstraint("task_id", "day", "recipient_id", "stage", name="task_alerts_once"),
+        CheckConstraint("stage IN ('caregiver', 'supervisor')", name="task_alerts_stage_valid"),
+    )
+
+    id: Mapped[uuid.UUID] = _id()
+    task_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("care_tasks.id", ondelete="CASCADE"), nullable=False)
+    day: Mapped[date] = mapped_column(Date, nullable=False)
+    recipient_id: Mapped[uuid.UUID] = _user_fk()
+    stage: Mapped[str] = mapped_column(String(12), nullable=False)
+    sent_at: Mapped[datetime] = _created()
 
 
 # --- Access log --------------------------------------------------------------

@@ -5,7 +5,7 @@ from typing import Annotated, Generic, Literal, TypeVar
 from pydantic import StringConstraints
 
 from app.schemas.base import CamelModel
-from app.schemas.common import PersonWithEmailOut, UtcDateTime
+from app.schemas.common import PersonOut, PersonWithEmailOut, UtcDateTime
 
 T = TypeVar("T")
 
@@ -116,6 +116,14 @@ class AdminDocumentOut(CamelModel):
     title: str
     category: str
     recorded_on: date | None
+    patient_id: uuid.UUID
+    file_type: str | None = None
+    file_name: str | None = None
+    size_bytes: int | None = None
+    file_uri: str | None = None
+    uploaded_by: PersonOut | None = None
+    uploaded_at: UtcDateTime
+    deleted_at: UtcDateTime | None = None
 
 
 class AccessLogOut(CamelModel):

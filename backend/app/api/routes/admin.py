@@ -57,6 +57,7 @@ from app.schemas.admin import (
 from app.schemas.common import PersonOut, PersonWithEmailOut
 from app.schemas.entries import EntryOut, Kind
 from app.services import access, photos, stats
+from app.api.routes.health_records import document_out
 from app.services.permissions import has_permission
 from app.services.reminders import local_day_bounds
 
@@ -335,9 +336,14 @@ def patient_reminders(patient_id: uuid.UUID,
 @router.get("/patients/{patient_id}/documents", response_model=list[AdminDocumentOut])
 def patient_documents(patient_id: uuid.UUID, me: CurrentUser = Depends(need("records.view")),
                       db: Session = Depends(get_db)):
+    """Including deleted ones (marked), since they stay part of the health record."""
     _patient(db, patient_id, me, "documents.view")
-    return list(db.scalars(select(HealthDocument).where(HealthDocument.patient_id == patient_id)
-                           .order_by(HealthDocument.recorded_on.desc().nulls_last())))
+    uploader = aliased(User)
+    rows = db.execute(select(HealthDocument, uploader)
+                      .outerjoin(uploader, uploader.id == HealthDocument.uploaded_by)
+                      .where(HealthDocument.patient_id == patient_id)
+                      .order_by(HealthDocument.recorded_on.desc().nulls_last(), HealthDocument.created_at.desc()))
+    return [AdminDocumentOut(**document_out(d, u).model_dump(), deleted_at=d.deleted_at) for d, u in rows]
 
 
 def _entry_rows(db: Session, patient_id: uuid.UUID, kind: str | None, start: date | None,
