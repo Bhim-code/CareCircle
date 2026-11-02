@@ -107,3 +107,37 @@ def cleanup(db: Session, older_than_hours: int = 24) -> int:
             path.unlink(missing_ok=True)
             removed += 1
     return removed
+
+
+# --- profile photos ------------------------------------------------------------
+# Stored next to record photos under profiles/, served only through signed links.
+
+def profile_dir() -> Path:
+    path = photo_dir() / "profiles"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def save_profile_photo(data: bytes, ext: str) -> str:
+    key = f"{uuid.uuid4().hex}{ext}"
+    (profile_dir() / key).write_bytes(data)
+    return key
+
+
+def remove_profile_photo(key: str | None) -> None:
+    if key:
+        (profile_dir() / key).unlink(missing_ok=True)
+
+
+def signed_profile_uri(user_id: uuid.UUID, key: str) -> str:
+    settings = get_settings()
+    expires = int(time.time()) + settings.photo_link_minutes * 60
+    sig = _signature(f"profile:{user_id}:{key}", expires)
+    return settings.public_base_url.rstrip("/") + \
+        f"/files/profile-photos/{user_id}?v={key}&expires={expires}&sig={sig}"
+
+
+def profile_signature_ok(user_id: uuid.UUID, key: str, expires: int, sig: str) -> bool:
+    if expires < time.time():
+        return False
+    return hmac.compare_digest(_signature(f"profile:{user_id}:{key}", expires), sig)

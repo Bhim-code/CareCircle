@@ -15,11 +15,8 @@ Long = Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)]
 
 # Which fields belong to which kind. Anything else must be null.
 ONLY_FOR = {"severity": "incident", "mood": "behavioural", "medicine_name": "medication"}
-# Who may write which kind (api-contract.md "Who may do what").
-WRITABLE_KINDS = {
-    "patient": {"medical", "incident", "medication"},
-    "caregiver": {"behavioural", "incident", "medication"},
-}
+# Who may write which kind is now a permission (entries.write.<kind>), set per role
+# in the admin panel. The defaults match api-contract.md (app/core/permissions.py).
 FUTURE_ALLOWANCE = timedelta(minutes=1)
 
 

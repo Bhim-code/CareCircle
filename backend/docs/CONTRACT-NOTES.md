@@ -7,6 +7,24 @@ the API had to choose. Please read sections 1 and 2 before wiring up sign-in.
 Interactive docs with every request and response: run the API and open
 http://localhost:8000/docs.
 
+## 0. New: roles are given by a supervisor (please read first)
+
+- `POST /auth/sign-up`: `role` is now **optional** and only a hint. Every new account
+  starts with `user.role = "pending"` and the person is signed in.
+- While `role` is `"pending"`, the app-data endpoints (reminders, medicines, written
+  records, health documents, inviting caregivers) answer **403**; `/me`, settings and
+  sign-in work. The app should show a "Waiting for approval" screen
+  (check `GET /me` from time to time or when the app opens).
+- When a supervisor assigns a role, the person is **signed out** (the next request,
+  and `/auth/refresh`, give 401). The app should go to the sign-in screen; after signing
+  in, `user.role` is the new kind (`patient`, `caregiver`, `supervisor`).
+- `GET /me` now also returns `roleName` (e.g. "Night nurse") and `permissions`, a list
+  such as `["entries.write.incident", "entries.write.medication"]`. Use it to decide which
+  record kinds to offer, instead of the fixed table in the contract. The fixed table is
+  now only the default.
+- A role can be changed later (patient to caregiver and so on): treat it like a fresh
+  sign-in, because the person is signed out then too.
+
 ## 1. Changes the app must handle
 
 | What | Why | What the app does |

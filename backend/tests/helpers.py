@@ -35,7 +35,22 @@ def sign_up(client: TestClient, name: str, role: str, email: str | None = None,
     response = client.post("/auth/sign-up", json={"name": name, "email": email, "password": PASSWORD,
                                                   "role": role, "timezone": timezone})
     assert response.status_code == 201, response.text
-    return _person(response.json())
+    person = _person(response.json())
+    give_role(person.email, role)  # what a supervisor would do; tokens stay valid
+    person.role = role
+    return person
+
+
+def give_role(email: str, kind: str) -> None:
+    """Test shortcut: give someone the built-in role of a kind, straight in the database."""
+    from sqlalchemy import text
+    from app.db.session import get_engine
+    with get_engine().begin() as connection:
+        connection.execute(text(
+            "UPDATE users SET role = CAST(:k AS varchar), requested_role = NULL, "
+            "role_id = (SELECT id FROM roles WHERE is_system AND kind = CAST(:k AS varchar)) "
+            "WHERE email = :e"),
+            {"k": kind, "e": email.lower()})
 
 
 def sign_in(client: TestClient, email: str, password: str = PASSWORD) -> Person:
@@ -44,11 +59,31 @@ def sign_in(client: TestClient, email: str, password: str = PASSWORD) -> Person:
     return _person(response.json())
 
 
-def staff(client: TestClient, role: str, name: str | None = None) -> Person:
+def staff(client: TestClient, role: str, name: str | None = None,
+          organization: str | None = "Harbour Care") -> Person:
+    """Admins are global; supervisors get a company (created if needed)."""
+    from sqlalchemy import func, select
+    from sqlalchemy.orm import Session
+
+    from app.cli import create_org
+    from app.db.models import Organization
+    from app.db.session import get_engine
+
     name = name or role.title()
     email = f"{role}.{name.lower().replace(' ', '.')}@test.example"
-    create_staff(email, name, role, PASSWORD)
+    org = organization if role == "supervisor" else None
+    if org:
+        with Session(get_engine()) as db:
+            exists = db.scalar(select(Organization.id).where(func.lower(Organization.name) == org.lower()))
+        if not exists:
+            create_org(org)
+    create_staff(email, name, role, PASSWORD, organization=org)
     return sign_in(client, email)
+
+
+def join_company(person: "Person", organization: str = "Harbour Care") -> None:
+    from app.cli import set_company
+    set_company(person.email, organization)
 
 
 def link(client: TestClient, patient: Person, caregiver: Person) -> str:

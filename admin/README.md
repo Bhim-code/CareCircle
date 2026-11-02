@@ -12,9 +12,10 @@ JavaScript, with no framework and nothing to build to run it.
    python -m http.server 5500
    ```
 
-3. Open http://localhost:5500 and sign in:
-   - `sue@demo.carecircle.test` / `demo1234`: supervisor (read only)
-   - `al@demo.carecircle.test` / `demo1234`: admin (can turn accounts off and on)
+3. Open http://localhost:5500 and sign in (password `demo1234`):
+   - `sue@demo.carecircle.test`: supervisor of Harbour Home Care, with full control of it
+   - `al@demo.carecircle.test`: admin (every company)
+   Two demo people (`pat@`, `carl@`) are waiting for a role.
 
 Patients and caregivers are refused; they use the app. The port must match
 `CORS_ORIGINS` in `backend/.env` (5500 by default). To point at another API, edit
@@ -24,12 +25,17 @@ Patients and caregivers are refused; they use the app. The port must match
 
 | Page | |
 |---|---|
-| Overview | 7-day adherence circle, today's doses (taken, due, missed, upcoming), totals |
+| People | Everyone in the company, with tabs (Waiting for a role, Patients, Caregivers, Supervisors). Each row: photo, role picker, on/off switch, Profile, Edit, Delete. "Add person" creates an account and emails a set-password link. |
+| Profile | Photo, details (phone, date of birth, address, emergency contact, notes), role, permissions (from the role, plus extra ones for this person), history of every change |
+| Roles & permissions | A grid of roles × permissions; tick to change what a role can do; create roles (e.g. "Night nurse") |
+| Overview | 7-day adherence circle, today's doses (taken, due, missed, upcoming), totals, for your company (supervisor) or all companies (admin) |
 | Patients | Search, then open a patient: details, caregivers, medicines, adherence |
+| Caregivers | Every caregiver of the company, each with an on/off switch; open one to see the patients they look after |
 | Patient: Records | Written records, filtered by kind and dates, with CSV export |
 | Patient: Reminders | Every dose and its status, with CSV export |
 | Patient: Documents | Health documents |
-| All accounts | Everyone, filtered by role; admins can turn accounts off and on |
+| All accounts | Everyone in your company, filtered by role. Supervisors get an on/off switch on caregivers; admins on everyone (except themselves) and can change a person's company. |
+| Companies | Admin only: create companies and see their size |
 | Access log | Who looked at which patient's data and when, including refused attempts |
 
 Every patient page and export is written to the access log by the API.

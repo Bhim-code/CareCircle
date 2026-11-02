@@ -6,11 +6,13 @@ Run it once on an empty database. To start again from nothing:
     alembic downgrade base && alembic upgrade head && python -m app.seed
 (The access log is append-only, so demo accounts are never deleted one by one.)
 
-Creates (password for all: demo1234):
-    patient     ana@demo.carecircle.test     (+ bob@ as a second patient)
-    caregiver   sam@demo.carecircle.test     (linked to Ana)
-    supervisor  sue@demo.carecircle.test     (read only, admin panel)
-    admin       al@demo.carecircle.test      (admin panel)
+Creates one company, Harbour Home Care (password for every account: demo1234):
+
+    patients    ana@ and bob@demo.carecircle.test
+    caregiver   sam@demo.carecircle.test     (looks after Ana)
+    supervisor  sue@demo.carecircle.test     (admin panel: full control of the company)
+    waiting     pat@ and carl@demo.carecircle.test  (signed up, waiting for a role)
+    admin       al@demo.carecircle.test      (admin panel, platform administrator)
 and two weeks of medicines, reminders (some missed), documents and records.
 Never run this against a database with real people in it.
 """
@@ -27,6 +29,7 @@ from app.core.config import get_settings
 from app.core.security import hash_password
 from app.db.models import (
     CareLink,
+    Organization,
     HealthDocument,
     Medicine,
     RecordEntry,
@@ -41,9 +44,11 @@ PASSWORD = "demo1234"
 TZ = "America/St_Johns"
 
 
-def _user(db: Session, name: str, role: str, password_hash: str) -> User:
+def _user(db: Session, name: str, role: str, password_hash: str,
+          company: Organization | None = None) -> User:
     user = User(email=f"{name.split()[0].lower()}@{DOMAIN}", name=name, role=role,
-                password_hash=password_hash, timezone=TZ)
+                password_hash=password_hash, timezone=TZ,
+                organization_id=company.id if company else None)
     db.add(user)
     db.flush()
     db.add(UserPreferences(user_id=user.id))
@@ -63,11 +68,18 @@ def seed() -> None:
         if db.scalar(select(User.id).where(User.email.like(f"%@{DOMAIN}")).limit(1)):
             sys.exit("Demo data is already loaded. To reload: alembic downgrade base && "
                      "alembic upgrade head && python -m app.seed")
-        ana = _user(db, "Ana Patient", "patient", password_hash)
-        bob = _user(db, "Bob Fisher", "patient", password_hash)
-        sam = _user(db, "Sam Caregiver", "caregiver", password_hash)
-        _user(db, "Sue Supervisor", "supervisor", password_hash)
+        harbour = Organization(name="Harbour Home Care")
+        db.add(harbour)
+        db.flush()
+        ana = _user(db, "Ana Patient", "patient", password_hash, harbour)
+        bob = _user(db, "Bob Fisher", "patient", password_hash, harbour)
+        sam = _user(db, "Sam Caregiver", "caregiver", password_hash, harbour)
+        _user(db, "Sue Supervisor", "supervisor", password_hash, harbour)
         _user(db, "Al Admin", "admin", password_hash)
+        # Two people who signed up in the app and wait for Sue to assign a role.
+        for name, asked in (("Pat Newman", "patient"), ("Carl Brooks", "caregiver")):
+            pending = _user(db, name, "pending", password_hash, harbour)
+            pending.requested_role = asked
 
         db.add(CareLink(patient_id=ana.id, caregiver_id=sam.id, invited_email=sam.email,
                         status="active", accepted_at=now - timedelta(days=20)))
@@ -103,8 +115,10 @@ def seed() -> None:
                            recorded_on=today - timedelta(days=5)),
         ])
 
-        def entry(author: User, kind: str, title: str, notes: str, hours_ago: int, **extra) -> None:
-            db.add(RecordEntry(patient_id=ana.id, kind=kind, client_name="Ana Patient", title=title,
+        def entry(author: User, kind: str, title: str, notes: str, hours_ago: int,
+                  patient: User | None = None, **extra) -> None:
+            patient = patient or ana
+            db.add(RecordEntry(patient_id=patient.id, kind=kind, client_name=patient.name, title=title,
                                notes=notes, occurred_at=now - timedelta(hours=hours_ago),
                                recorded_by=author.id, **extra))
 
@@ -120,8 +134,11 @@ def seed() -> None:
         db.commit()
 
     print(f"Demo data loaded. Every demo account uses the password {PASSWORD!r}:")
-    for who in ("ana (patient)", "bob (patient)", "sam (caregiver)", "sue (supervisor)", "al (admin)"):
-        print(f"  {who.split()[0]}@{DOMAIN}  {who.split()[1]}")
+    for who in ("ana patient", "bob patient", "sam caregiver", "sue supervisor (full control)",
+                "pat waiting for a role (asked: patient)", "carl waiting for a role (asked: caregiver)",
+                "al admin"):
+        first, rest = who.split(" ", 1)
+        print(f"  {first}@{DOMAIN}  ({rest})")
 
 
 if __name__ == "__main__":

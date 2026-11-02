@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy import select
 
 from app.db.models import AccessLog, Medicine, Reminder
-from tests.helpers import link, sign_up, staff
+from tests.helpers import join_company, link, sign_up, staff
 from tests.test_entries import entry
 
 
@@ -33,8 +33,10 @@ def world(client, db):
         Reminder(patient_id=med.patient_id, medicine_id=med.id, scheduled_at=now - timedelta(minutes=10)),
     ])
     db.commit()
-    sup = staff(client, "supervisor", "Sue")
+    sup = staff(client, "supervisor", "Sue")  # company "Harbour Care"
     adm = staff(client, "admin", "Al")
+    for person in (ana, bob, sam):
+        join_company(person)
     return {"ana": ana, "bob": bob, "sam": sam, "sup": sup, "adm": adm}
 
 
@@ -76,17 +78,17 @@ def test_supervisor_reads_everything_and_every_view_is_logged(client, db, world)
     assert logged == ["patient.view", "reminders.view", "entries.view", "documents.view"]
 
 
-def test_supervisor_cannot_change_anything(client, world):
+def test_supervisor_can_turn_off_a_patient_in_own_company(client, world):
     response = client.patch(f"/admin/users/{world['ana'].id}", json={"isActive": False},
                             headers=world["sup"].auth)
-    assert response.status_code == 403
-    assert client.get("/me", headers=world["ana"].auth).status_code == 200
+    assert response.status_code == 200
+    assert client.get("/me", headers=world["ana"].auth).status_code == 401
 
 
 def test_admin_deactivates_and_access_ends_immediately(client, world):
     adm, ana = world["adm"], world["ana"]
     response = client.patch(f"/admin/users/{ana.id}", json={"isActive": False}, headers=adm.auth)
-    assert response.status_code == 200 and response.json()["isActive"] is False
+    assert response.status_code == 200 and response.json()["person"]["isActive"] is False
     assert client.get("/me", headers=ana.auth).status_code == 401
     assert client.patch(f"/admin/users/{adm.id}", json={"isActive": False}, headers=adm.auth).status_code == 422
     assert client.patch(f"/admin/users/{ana.id}", json={"role": "admin"}, headers=adm.auth).status_code == 422

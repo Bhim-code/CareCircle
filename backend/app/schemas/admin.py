@@ -1,6 +1,8 @@
 import uuid
 from datetime import date
-from typing import Generic, Literal, TypeVar
+from typing import Annotated, Generic, Literal, TypeVar
+
+from pydantic import StringConstraints
 
 from app.schemas.base import CamelModel
 from app.schemas.common import PersonWithEmailOut, UtcDateTime
@@ -23,7 +25,25 @@ class RemindersToday(CamelModel):
     upcoming: int
 
 
+class CompanyRef(CamelModel):
+    id: uuid.UUID
+    name: str
+
+
+class CompanyOut(CompanyRef):
+    patients: int
+    caregivers: int
+    supervisors: int
+    created_at: UtcDateTime
+
+
+class CompanyIn(CamelModel):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+
+
 class OverviewOut(CamelModel):
+    # The company these numbers cover (a supervisor's own); null = every company (admin).
+    company: CompanyRef | None
     patients: int
     caregivers: int
     active_links: int
@@ -37,15 +57,33 @@ class AdminUserOut(CamelModel):
     id: uuid.UUID
     name: str
     email: str
+    # The role's kind (patient | caregiver | supervisor | admin) or "pending".
     role: str
+    role_id: uuid.UUID | None = None
+    role_name: str | None = None
+    # What they asked for at sign-up while pending (a hint only).
+    requested_role: str | None = None
     is_active: bool
     timezone: str
+    company: CompanyRef | None = None
+    photo_uri: str | None = None
     created_at: UtcDateTime
 
 
-class UserUpdateIn(CamelModel):
-    is_active: bool
+class CaregiverPatientOut(CamelModel):
+    id: uuid.UUID
+    name: str
+    email: str
+    linked_since: UtcDateTime | None
+    adherence_last_7_days: float | None
 
+
+class CaregiverDetailOut(CamelModel):
+    caregiver: AdminUserOut
+    patients: list[CaregiverPatientOut]
+    # Linked patients who belong to another company (names hidden from supervisors).
+    other_company_patients: int
+    entries_written_last_7_days: int
 
 class AdminMedicineOut(CamelModel):
     id: uuid.UUID
@@ -87,3 +125,93 @@ class AccessLogOut(CamelModel):
     patient: PersonWithEmailOut | None
     action: str
     outcome: Literal["allowed", "denied"]
+
+
+# --- people, roles and permissions -------------------------------------------
+
+Phone = Annotated[str, StringConstraints(strip_whitespace=True, max_length=30, pattern=r"^[0-9 +()\-.]*$")]
+
+
+class ProfileFields(CamelModel):
+    phone: Phone | None = None
+    date_of_birth: date | None = None
+    address: Annotated[str, StringConstraints(strip_whitespace=True, max_length=300)] | None = None
+    emergency_contact_name: Annotated[str, StringConstraints(strip_whitespace=True, max_length=100)] | None = None
+    emergency_contact_phone: Phone | None = None
+    notes: Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)] | None = None
+
+
+class PersonCreateIn(ProfileFields):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+    email: Annotated[str, StringConstraints(strip_whitespace=True, to_lower=True, max_length=254,
+                                            pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")]
+    # null = waiting for a role
+    role_id: uuid.UUID | None = None
+
+
+class PersonUpdateIn(ProfileFields):
+    """Send only what changes. Details need people.edit, isActive people.deactivate,
+    organizationId an admin."""
+
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)] | None = None
+    is_active: bool | None = None
+    organization_id: uuid.UUID | None = None
+
+
+class RoleAssignIn(CamelModel):
+    role_id: uuid.UUID
+
+
+class PermissionsIn(CamelModel):
+    permissions: list[Annotated[str, StringConstraints(max_length=60)]]
+
+
+class PermissionOut(CamelModel):
+    code: str
+    group: str
+    description: str
+
+
+class RoleOut(CamelModel):
+    id: uuid.UUID
+    name: str
+    kind: str
+    description: str
+    is_system: bool
+    permissions: list[str]
+    people: int
+
+
+class RoleIn(CamelModel):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=60)]
+    kind: Literal["patient", "caregiver", "supervisor"]
+    description: Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)] = ""
+    permissions: list[Annotated[str, StringConstraints(max_length=60)]] = []
+
+
+class RoleUpdateIn(CamelModel):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=60)] | None = None
+    description: Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)] | None = None
+    permissions: list[Annotated[str, StringConstraints(max_length=60)]] | None = None
+
+
+class ChangeOut(CamelModel):
+    at: UtcDateTime
+    change: str
+    by: PersonWithEmailOut | None
+    before: dict | None
+    after: dict | None
+
+
+class ProfileOut(ProfileFields):
+    person: AdminUserOut
+    role_permissions: list[str]
+    extra_permissions: list[str]
+    effective_permissions: list[str]
+    active_links: int
+    history: list[ChangeOut]
+
+
+class StaffMeOut(CamelModel):
+    person: AdminUserOut
+    permissions: list[str]

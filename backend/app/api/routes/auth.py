@@ -17,7 +17,7 @@ from app.core.security import (
     utcnow,
     verify_password,
 )
-from app.db.models import PasswordResetToken, User, UserPreferences
+from app.db.models import Organization, PasswordResetToken, User, UserPreferences
 from app.db.session import get_db
 from app.schemas.auth import (
     PasswordResetConfirmIn,
@@ -40,10 +40,15 @@ _401 = {401: {"description": "Not signed in, or the token is no longer valid."}}
 @router.post("/sign-up", response_model=SessionOut, status_code=201,
              responses={409: {"description": "An account already uses this email."}})
 def sign_up(body: SignUpIn, request: Request, db: Session = Depends(get_db)) -> SessionOut:
-    """Create a patient or caregiver account and sign in. Admin and supervisor are refused (422)."""
+    """Create an account and sign in. It waits with role "pending" until a supervisor
+    assigns a role; until then every other endpoint answers 403. The optional `role`
+    is kept only as a hint for the supervisor. Admin and supervisor are refused (422).
+    If there is exactly one company, the person joins it so its supervisors see them."""
     enforce(request, "sign-up", limit=10, window_seconds=3600)
-    user = User(email=body.email, name=body.name, role=body.role,
-                password_hash=hash_password(body.password), timezone=body.timezone)
+    companies = db.scalars(select(Organization.id).limit(2)).all()
+    user = User(email=body.email, name=body.name, role="pending", requested_role=body.role,
+                password_hash=hash_password(body.password), timezone=body.timezone,
+                organization_id=companies[0] if len(companies) == 1 else None)
     db.add(user)
     try:
         db.flush()
