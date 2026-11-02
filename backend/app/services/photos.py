@@ -64,6 +64,17 @@ def _signature(photo_id: str, expires: int) -> str:
     return hmac.new(key, f"{photo_id}:{expires}".encode(), hashlib.sha256).hexdigest()
 
 
+def sign(value: str, expires: int) -> str:
+    """HMAC signature for an expiring link (shared by photos and documents)."""
+    return _signature(value, expires)
+
+
+def signature_ok_for(value: str, expires: int, sig: str) -> bool:
+    if expires < time.time():
+        return False
+    return hmac.compare_digest(_signature(value, expires), sig)
+
+
 def signed_uri(photo_id: uuid.UUID) -> str:
     settings = get_settings()
     expires = int(time.time()) + settings.photo_link_minutes * 60

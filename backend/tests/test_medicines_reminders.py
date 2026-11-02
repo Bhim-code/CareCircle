@@ -50,7 +50,8 @@ def test_caregivers_cannot_use_patient_endpoints(client):
     link(client, ana, sam)
     assert client.get("/medicines", headers=sam.auth).status_code == 403
     assert client.get("/reminders?day=2026-10-15", headers=sam.auth).status_code == 403
-    assert client.get("/health-records", headers=sam.auth).status_code == 403
+    # Documents are different: a linked caregiver may see them (see test_documents.py).
+    assert client.get("/health-records", headers=sam.auth).status_code == 200
 
 
 def test_reminders_are_the_patients_own_and_in_contract_shape(client, db):
@@ -203,6 +204,8 @@ def test_health_records_are_own_only(client, db):
     db.commit()
     docs = client.get("/health-records", headers=ana.auth).json()
     assert [d["title"] for d in docs] == ["Blood test", "Old letter"]
-    assert docs[0] == {"id": docs[0]["id"], "title": "Blood test", "category": "lab_report",
-                       "recordedOn": "2026-09-01"}
+    # The contract's four fields are unchanged (file fields were added alongside).
+    assert {k: docs[0][k] for k in ("title", "category", "recordedOn")} == {
+        "title": "Blood test", "category": "lab_report", "recordedOn": "2026-09-01"}
+    assert docs[0]["fileType"] is None and docs[0]["fileUri"] is None
     assert docs[1]["recordedOn"] is None

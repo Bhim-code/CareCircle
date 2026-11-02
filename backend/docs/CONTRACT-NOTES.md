@@ -25,6 +25,47 @@ http://localhost:8000/docs.
 - A role can be changed later (patient to caregiver and so on): treat it like a fresh
   sign-in, because the person is signed out then too.
 
+## 0b. New: uploading documents from the phone
+
+The Records > Documents screen can now upload files. A **patient** uploads their own; a
+**caregiver** uploads for a linked patient (and sees their documents too).
+
+`POST /health-records` as **multipart/form-data**:
+
+| Field | |
+|---|---|
+| `file` | PDF, JPEG, PNG or HEIC (iPhone camera), at most **10 MB** |
+| `title` | 1 to 200 characters |
+| `category` | `prescription`, `lab_report`, `imaging`, `discharge_summary`, `other` |
+| `recordedOn` | optional, `YYYY-MM-DD`, not in the future |
+| `patientId` | caregivers with more than one linked patient |
+
+```ts
+// React Native: append the file as { uri, name, type } (from the image or document picker).
+const form = new FormData();
+form.append('file', { uri: asset.uri, name: asset.fileName ?? 'photo.jpg', type: asset.mimeType ?? 'image/jpeg' } as any);
+form.append('title', 'Blood test');
+form.append('category', 'lab_report');
+await fetch(`${API}/health-records`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
+// Do not set Content-Type yourself; fetch adds the multipart boundary.
+```
+
+- **201** returns the document. **413**: file too big. **415**: not an allowed type, can't be
+  read, or a PDF with scripts. The `error.message` can be shown to the person as is.
+- HEIC photos come back as JPEG. Photos are re-saved without hidden data (GPS location,
+  camera details).
+- `GET /health-records` items now also have `patientId`, `fileType` (`pdf`, `image`, or
+  null for details-only documents), `fileName`, `sizeBytes`, `uploadedBy`, `uploadedAt`
+  and `fileUri`. **`fileUri` works for about 15 minutes**: open it straight away (image
+  view, or a PDF viewer or web view), and fetch the list again for a fresh link. Caregivers
+  may add `?patientId=`.
+- `DELETE /health-records/{id}`: the patient, or the person who uploaded it. It disappears
+  from the app; staff can still see it marked as deleted.
+- Permissions `documents.upload` / `documents.view` control this (on by default for
+  patients and caregivers); check `GET /me` `permissions` to show or hide the buttons.
+- Please check the current Expo docs for the image and document picker APIs; they change
+  between SDK versions.
+
 ## 1. Changes the app must handle
 
 | What | Why | What the app does |

@@ -28,6 +28,8 @@ PERMISSIONS: dict[str, tuple[str, str]] = {
     "entries.write.behavioural": ("App", "Write behavioural records"),
     "entries.write.incident": ("App", "Write incident records"),
     "entries.write.medication": ("App", "Write medication records"),
+    "documents.upload": ("App", "Upload health documents (own, or for linked patients)"),
+    "documents.view": ("App", "Open health documents (own, or of linked patients)"),
 }
 
 PANEL_PERMISSIONS = [code for code, (group, _) in PERMISSIONS.items() if group == "Admin panel"]
@@ -40,9 +42,11 @@ KINDS = ("patient", "caregiver", "supervisor", "admin")
 # The roles created at install time (api-contract.md "Who may do what").
 DEFAULT_ROLES: list[dict] = [
     {"name": "Patient", "kind": "patient", "description": "Receives care and medicine reminders",
-     "permissions": ["entries.write.medical", "entries.write.incident", "entries.write.medication"]},
+     "permissions": ["entries.write.medical", "entries.write.incident", "entries.write.medication",
+                     "documents.upload", "documents.view"]},
     {"name": "Caregiver", "kind": "caregiver", "description": "Looks after linked patients",
-     "permissions": ["entries.write.behavioural", "entries.write.incident", "entries.write.medication"]},
+     "permissions": ["entries.write.behavioural", "entries.write.incident", "entries.write.medication",
+                     "documents.upload", "documents.view"]},
     {"name": "Supervisor", "kind": "supervisor", "description": "Runs the care team in the admin panel",
      "permissions": PANEL_PERMISSIONS},
     {"name": "Admin", "kind": "admin", "description": "Platform administrator (every permission)",

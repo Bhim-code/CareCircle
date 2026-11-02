@@ -60,7 +60,7 @@ or `DATABASE_URL` in `.env` is wrong.
 pytest
 ```
 
-148 tests run against a real PostgreSQL database built from the migrations, in about
+171 tests run against a real PostgreSQL database built from the migrations, in about
 20 seconds. They always use `TEST_DATABASE_URL` (default `carecircle_test`), never your
 data. GitHub Actions runs them on every push (`.github/workflows/backend.yml`).
 
@@ -113,7 +113,7 @@ The full list with request and response shapes is at http://localhost:8000/docs.
 | Me | `GET/PATCH /me`, `GET/PUT /me/preferences`, `PUT/DELETE /me/push-token`, `GET /me/access-log` |
 | Care links | `POST /care-links/invitations`, `GET /care-links`, `POST /care-links/invitations/{id}/accept`, `DELETE /care-links/{id}` |
 | Medicines | `GET/POST /medicines`, `DELETE /medicines/{id}`, `GET /reminders?day=`, `POST /reminders/{id}/acknowledge` |
-| Records | `GET /health-records`, `GET/POST /entries`, `PUT /entries/{id}`, `POST /entries/photo`, `GET /files/photos/{id}` |
+| Records | `GET/POST /health-records` (POST = upload a PDF or photo), `DELETE /health-records/{id}`, `GET /files/documents/{id}`, `GET/POST /entries`, `PUT /entries/{id}`, `POST /entries/photo`, `GET /files/photos/{id}` |
 | People and roles | `GET /admin/me`, `GET/POST /admin/users`, `GET/PATCH/DELETE /admin/users/{id}` (profile; delete = turn off), `PUT /admin/users/{id}/role`, `PUT /admin/users/{id}/permissions`, `POST/DELETE /admin/users/{id}/photo`, `GET /admin/permissions`, `GET/POST /admin/roles`, `PATCH/DELETE /admin/roles/{id}` |
 | Admin panel | `GET /admin/overview`, `/admin/users`, `PATCH /admin/users/{id}` (active, company), `/admin/patients/{id}` (+ `/reminders`, `/documents`, `/entries`, `.csv` exports), `/admin/caregivers/{id}`, `GET/POST /admin/organizations`, `/admin/access-log`. Supervisors see their own company only. |
 
@@ -140,6 +140,7 @@ explains all of them. A blank value means "use the default". The important ones:
 | `CORS_ORIGINS` | `http://localhost:5500` | Browser origins allowed to call the API (the admin panel) |
 | `TRUST_PROXY_HEADERS` | `true` when hosted | Read the client IP and HTTPS from the host's proxy |
 | `PHOTO_DIR` | `storage/photos` | Private folder for photos |
+| `STORAGE_DIR` | `storage/files` | Private folder for uploaded documents (`STORAGE_BACKEND=local`) |
 | `SMTP_HOST` … | | Real email; empty = log only |
 | `PUSH_PROVIDER` | `log` or `expo` | Real phone pushes through Expo |
 

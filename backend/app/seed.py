@@ -17,8 +17,10 @@ and two weeks of medicines, reminders (some missed), documents and records.
 Never run this against a database with real people in it.
 """
 
+import io
 import random
 import sys
+import uuid
 from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
@@ -53,6 +55,48 @@ def _user(db: Session, name: str, role: str, password_hash: str,
     db.flush()
     db.add(UserPreferences(user_id=user.id))
     return user
+
+
+def _demo_pdf(text: str) -> bytes:
+    """A small, valid one-page PDF with a line of text."""
+    stream = f"BT /F1 18 Tf 72 720 Td ({text}) Tj ET".encode()
+    objects = [b"<< /Type /Catalog /Pages 2 0 R >>",
+               b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+               b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R "
+               b"/Resources << /Font << /F1 5 0 R >> >> >>",
+               b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"\nendstream",
+               b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"]
+    out, offsets = bytearray(b"%PDF-1.4\n"), []
+    for number, body in enumerate(objects, 1):
+        offsets.append(len(out))
+        out += f"{number} 0 obj\n".encode() + body + b"\nendobj\n"
+    xref = len(out)
+    out += f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode()
+    out += b"".join(f"{o:010d} 00000 n \n".encode() for o in offsets)
+    out += f"trailer << /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
+    return bytes(out)
+
+
+def _demo_photo() -> bytes:
+    from PIL import Image, ImageDraw
+    image = Image.new("RGB", (480, 640), (246, 247, 249))
+    draw = ImageDraw.Draw(image)
+    for i, line in enumerate(["PHARMACY RECEIPT (demo)", "Metformin 500 mg x 60", "Lisinopril 10 mg x 30"]):
+        draw.text((40, 60 + i * 40), line, fill=(28, 36, 51))
+    out = io.BytesIO()
+    image.save(out, format="JPEG", quality=85)
+    return out.getvalue()
+
+
+def _demo_file(db: Session, patient: User, uploader: User, title: str, category: str, recorded_on,
+               data: bytes, file_name: str, content_type: str) -> None:
+    from app.services.storage import get_storage
+    doc_id = uuid.uuid4()
+    key = f"documents/{patient.id}/{doc_id.hex}{'.pdf' if content_type == 'application/pdf' else '.jpg'}"
+    get_storage().save(key, data)
+    db.add(HealthDocument(id=doc_id, patient_id=patient.id, title=title, category=category,
+                          recorded_on=recorded_on, file_key=key, content_type=content_type,
+                          size_bytes=len(data), file_name=file_name, uploaded_by=uploader.id))
 
 
 def seed() -> None:
@@ -114,6 +158,13 @@ def seed() -> None:
             HealthDocument(patient_id=bob.id, title="Chest X-ray", category="imaging",
                            recorded_on=today - timedelta(days=5)),
         ])
+
+        # Two documents with real files, as if uploaded from the phones.
+        _demo_file(db, ana, sam, "Pharmacy receipt photo", "prescription", today - timedelta(days=2),
+                   _demo_photo(), "receipt.jpg", "image/jpeg")
+        _demo_file(db, ana, ana, "Cardiology letter", "discharge_summary", today - timedelta(days=9),
+                   _demo_pdf("Cardiology clinic - follow-up letter (demo)"), "cardiology-letter.pdf",
+                   "application/pdf")
 
         def entry(author: User, kind: str, title: str, notes: str, hours_ago: int,
                   patient: User | None = None, **extra) -> None:

@@ -1019,11 +1019,21 @@ async function remindersTab(host, p) {
     h('div', { class: 'mt-6' }, table));
 }
 
+const fmtSize = (n) => n === null || n === undefined ? '' : n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`;
+
 async function documentsTab(host, p) {
   const docs = await api(`/admin/patients/${p.id}/documents`);
-  host.replaceChildren(docs.length ? h('ul', { class: 'divide-y divide-rule' }, docs.map((d) => h('li', { class: 'flex flex-wrap justify-between gap-2 py-4' },
-    h('span', {}, h('span', { class: 'font-bold' }, d.title), h('span', { class: 'ml-3 text-sm text-muted' }, CATEGORY_LABEL[d.category] || d.category)),
-    h('span', { class: 'text-muted' }, fmtDate(d.recordedOn)))))
+  host.replaceChildren(docs.length ? h('ul', { class: 'divide-y divide-rule' }, docs.map((d) => h('li', { class: `flex flex-wrap items-start justify-between gap-3 py-4 ${d.deletedAt ? 'opacity-60' : ''}` },
+    h('div', {},
+      h('div', {}, h('span', { class: 'font-bold' }, d.title), h('span', { class: 'ml-3 text-sm text-muted' }, CATEGORY_LABEL[d.category] || d.category),
+        d.deletedAt ? h('span', { class: 'ml-3 rounded-full bg-missed/10 px-2 py-0.5 text-xs font-bold text-missed' }, `Deleted ${fmtDate(d.deletedAt.slice(0, 10))}`) : null),
+      h('p', { class: 'mt-1 text-sm text-muted' },
+        d.uploadedBy ? `Uploaded by ${d.uploadedBy.name} (${d.uploadedBy.role}), ${fmtDateTime(d.uploadedAt)}` : 'Added without a file',
+        d.fileType ? `, ${d.fileType === 'pdf' ? 'PDF' : 'photo'} ${fmtSize(d.sizeBytes)}` : '')),
+    h('div', { class: 'flex items-center gap-4' },
+      h('span', { class: 'text-muted' }, fmtDate(d.recordedOn)),
+      d.fileUri ? h('a', { href: photoSrc(d.fileUri), target: '_blank', rel: 'noopener noreferrer',
+        class: 'font-bold text-sage-dark underline underline-offset-2' }, 'Open') : null))))
     : h('p', { class: 'py-10 text-muted' }, 'No documents for this patient.'));
 }
 

@@ -369,9 +369,21 @@ class AlertSent(Base):
 # --- Health documents --------------------------------------------------------
 
 class HealthDocument(Base):
+    """A patient's document. Since migration 0005 it can carry an uploaded file
+    (older rows are details only). Deleting hides it (deleted_at); the file is kept."""
+
     __tablename__ = "health_documents"
     __table_args__ = (
         CheckConstraint(_in("category", DOCUMENT_CATEGORIES), name="health_documents_category_valid"),
+        # A file's details are all there or all missing.
+        CheckConstraint("(file_key IS NULL) = (content_type IS NULL) AND (file_key IS NULL) = (size_bytes IS NULL)",
+                        name="health_documents_file_complete"),
+        CheckConstraint("content_type IS NULL OR content_type IN ('application/pdf', 'image/jpeg', 'image/png')",
+                        name="health_documents_type_valid"),
+        CheckConstraint("size_bytes IS NULL OR (size_bytes > 0 AND size_bytes <= 10485760)",
+                        name="health_documents_size_valid"),
+        CheckConstraint("(deleted_at IS NULL) = (deleted_by IS NULL)", name="health_documents_deleted_by"),
+        UniqueConstraint("file_key", name="health_documents_file_key_key"),
         Index("health_documents_patient_idx", "patient_id"),
     )
 
@@ -381,6 +393,15 @@ class HealthDocument(Base):
     category: Mapped[str] = mapped_column(String(30), nullable=False)
     recorded_on: Mapped[date | None] = mapped_column(Date)
     created_at: Mapped[datetime] = _created()
+    file_key: Mapped[str | None] = mapped_column(String(200))
+    content_type: Mapped[str | None] = mapped_column(String(40))
+    size_bytes: Mapped[int | None] = mapped_column(Integer)
+    file_name: Mapped[str | None] = mapped_column(String(100))
+    uploaded_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT", name="health_documents_uploaded_by_fkey"))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT", name="health_documents_deleted_by_fkey"))
 
 
 # --- Written records ---------------------------------------------------------

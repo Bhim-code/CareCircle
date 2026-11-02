@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     force_https: bool | None = None
 
     # --- Files ---------------------------------------------------------------
+    # Uploaded documents. "local" = a private folder; a cloud bucket can be added later.
+    storage_backend: Literal["local"] = "local"
+    storage_dir: Path = Path("storage/files")
     photo_dir: Path = Path("storage/photos")
     photo_link_minutes: int = Field(default=15, ge=1, le=1440)
     # Public base URL of this API, used to build photo links. Empty = relative links.

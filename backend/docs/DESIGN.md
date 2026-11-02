@@ -45,7 +45,7 @@ The ER diagram is in `backend/README.md`. Main tables:
 | `care_links` | Patient → caregiver invitations and links (`pending`, `active`, `ended`) |
 | `medicines`, `reminders` | What to take and when (local times), and each dose as an exact UTC moment with when it was confirmed |
 | `alerts_sent` | One row per missed-dose alert; its unique key makes "send once" a database rule |
-| `health_documents` | Document list per patient |
+| `health_documents` | A patient's documents: title, category, date, and (since migration 0005) the uploaded file's private storage key, type, size, display name, who uploaded it, and when it was deleted (hidden; the file is kept) |
 | `record_entries`, `record_entry_history` | Written records and a full copy of every earlier version |
 | `entry_photos` | Private photos attached to records |
 | `user_preferences`, `push_tokens` | Settings and phone tokens |
@@ -128,13 +128,19 @@ How this is enforced:
   expire in 15 minutes. Links are handed out only to people allowed to read the record.
 - No health information in logs, error messages or notifications. Errors never echo
   submitted values. Alerts say "a scheduled dose", never the medicine.
+- Uploaded documents: type checked from the bytes (PDF, JPEG, PNG, HEIC), at most 10 MB;
+  photos are decoded and re-saved, which proves they are images, turns HEIC into JPEG and
+  strips hidden metadata such as GPS location; PDFs with scripts, launch actions or
+  embedded files are refused; display names are cleaned. Files live in private storage
+  behind one interface (`services/storage.py`) under random names, and are opened only
+  through signed links that expire, served with a `sandbox` Content-Security-Policy.
 - CSV exports are protected against spreadsheet formula injection.
 - Admin panel: data is inserted as text only (no HTML), with a strict
   Content-Security-Policy and no third-party scripts, fonts or styles.
 
 ## 5. Testing
 
-`pytest` runs 148 automated tests against a real PostgreSQL database built from the
+`pytest` runs 171 automated tests against a real PostgreSQL database built from the
 migrations (about 20 seconds). Each test starts with empty tables.
 
 | File | What it proves |
@@ -143,6 +149,7 @@ migrations (about 20 seconds). Each test starts with empty tables.
 | `test_entries.py` (28) | Two patients and two caregivers: nobody reads or edits anyone else's records (404 by id, too); role/kind table; server-set fields; history kept; ending a link removes access; photo type, size, ownership, expiry and forged links |
 | `test_medicines_reminders.py` (13) | Own reminders only; the patient's local day; daylight saving; idempotent generation; "I took it" only by the owner and never by the server |
 | `test_admin.py` (9) | Patients and caregivers refused (and logged); supervisor cannot change patients or settings; every view and export logged; CSV injection safe; patients see who viewed them |
+| `test_documents.py` (23) | Patient and linked caregiver upload real PDFs, JPEG, PNG and iPhone HEIC (converted to JPEG); GPS and camera data removed; fake, broken, oversized, scripted and attachment-carrying files refused; strangers cannot upload, list or open (404, forged and expired links fail); ending a link ends access; permissions switch uploading and viewing off; delete rules; storage cannot escape its folder |
 | `test_people_roles.py` (17) | New sign-ups wait with no access; assigning a role unlocks the app and signs them out; supervisors can make supervisors; nobody changes their own role or permissions; last supervisor protected; only admins give admin; patient-to-caregiver ends links but keeps records; extra permissions and role permissions take effect at once; custom roles; a limited supervisor role is enforced; create person with set-password email; profile, photo and history (append-only); delete keeps records; other companies out of reach |
 | `test_companies.py` (16) | Two companies: each supervisor sees all of their own company's patients and caregivers and none of the other's (lists, search, by id, CSV, overview, access log); a supervisor can switch only their own company's caregivers on or off (signs them out at once); only admins create companies and move people |
 | `test_jobs.py` (10) | Missed-dose alert after 60 minutes, sent once, only to linked caregivers who opted in, retried on failure; due pushes once; no medicine names |
@@ -164,4 +171,8 @@ GitHub Actions runs the same suite on every push and pull request
   processes, move them to Redis.
 - **Photos** are stored on the server's disk. Hosts with temporary disks need a persistent
   volume or a cloud bucket.
-- **Health document upload and download** are planned for later (contract).
+- **Cloud storage.** Files are on the server's disk today. A cloud bucket (S3, R2) is one
+  new class in `services/storage.py`; hosts that wipe the disk on deploy need it, or a
+  persistent volume.
+- **Downloads by link** are not written to the access log (the link works without sign-in so
+  phones can display it); handing out the link is logged for caregivers.

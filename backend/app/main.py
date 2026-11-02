@@ -42,7 +42,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     install_error_handlers(app)
     for router in (health.router, auth.router, me.router, care_links.router, medicines.router,
                    health_records.router, entries.router, entries.files_router, admin.router,
-                   people.router, people.files_router):
+                   people.router, people.files_router, health_records.files_router):
         app.include_router(router)
     return app
 

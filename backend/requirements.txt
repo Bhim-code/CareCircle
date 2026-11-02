@@ -10,3 +10,5 @@ PyJWT==2.15.1
 argon2-cffi==25.1.0
 email-validator==2.3.0
 python-multipart==0.0.32
+Pillow==12.3.0
+pillow-heif==1.8.1
