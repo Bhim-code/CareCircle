@@ -28,6 +28,7 @@ from app.db.models import CareTask, TaskCompletion, User
 from app.db.session import get_db
 from app.schemas.common import PersonOut
 from app.schemas.tasks import (
+    CareTaskAppIn,
     CareTaskIn,
     _parse_time,
     CareTaskOut,
@@ -50,12 +51,80 @@ admin_router = APIRouter(prefix="/admin", tags=["care tasks (admin panel)"])
 
 # --- shaping -------------------------------------------------------------------------
 
-def task_out(task: CareTask) -> CareTaskOut:
+def task_out(task: CareTask, creator: User | None = None) -> CareTaskOut:
     return CareTaskOut(id=task.id, patient_id=task.patient_id, title=task.title, instructions=task.instructions,
                        time=task.time_of_day.strftime("%H:%M") if task.time_of_day else None,
                        days=list(task.days), start_date=task.start_date, end_date=task.end_date,
                        grace_minutes=task.grace_minutes, created_at=task.created_at, ended_at=task.ended_at,
-                       replaced_by=task.replaced_by)
+                       replaced_by=task.replaced_by,
+                       created_by=PersonOut.model_validate(creator) if creator else None)
+
+
+def tasks_out(db: Session, tasks: list[CareTask]) -> list[CareTaskOut]:
+    ids = {t.created_by for t in tasks if t.created_by}
+    people = {u.id: u for u in db.scalars(select(User).where(User.id.in_(ids)))} if ids else {}
+    return [task_out(t, people.get(t.created_by)) for t in tasks]
+
+
+def _plan_query(patient_ids: list[uuid.UUID], include_ended: bool):
+    query = select(CareTask).where(CareTask.patient_id.in_(patient_ids))
+    if not include_ended:
+        query = query.where(CareTask.ended_at.is_(None))
+    return query.order_by(CareTask.time_of_day.nulls_last(), CareTask.title)
+
+
+# --- changing a plan (shared by the admin panel and the app) ----------------------------
+
+def plan_add(db: Session, actor: User, patient: User, body: CareTaskIn) -> CareTask:
+    task = CareTask(patient_id=patient.id, title=body.title, instructions=body.instructions,
+                    time_of_day=body.parsed_time(), days=body.days,
+                    start_date=body.start_date or ct.local_today(patient), end_date=body.end_date,
+                    grace_minutes=body.grace_minutes, created_by=actor.id, created_at=utcnow())
+    if task.end_date and task.end_date < task.start_date:
+        raise ApiError(422, fields={"endDate": "Cannot be before the start."})
+    db.add(task)
+    db.flush()
+    record_change(db, patient.id, actor.id, "care_plan", None, {"added": _snapshot(task)})
+    return task
+
+
+def plan_change(db: Session, actor: User, task: CareTask, patient: User, body: CareTaskUpdateIn) -> CareTask:
+    """Title and instructions change in place. A new time, days, end date or grace starts a
+    new version from now (the old one ends), so past days keep their plan."""
+    if task.ended_at is not None:
+        raise ApiError(409, "This task was removed or replaced.", code="task_ended")
+    sent = body.model_fields_set
+    before = _snapshot(task)
+    if "title" in sent and body.title:
+        task.title = body.title
+    if "instructions" in sent:
+        task.instructions = body.instructions
+    current = task
+    if sent & {"time", "days", "end_date", "grace_minutes"}:
+        now = utcnow()
+        new = CareTask(patient_id=task.patient_id, title=task.title, instructions=task.instructions,
+                       time_of_day=_parse_time(body.time) if "time" in sent else task.time_of_day,
+                       days=body.days if "days" in sent and body.days else task.days,
+                       start_date=max(task.start_date, ct.local_today(patient)),
+                       end_date=body.end_date if "end_date" in sent else task.end_date,
+                       grace_minutes=body.grace_minutes if "grace_minutes" in sent and body.grace_minutes is not None
+                       else task.grace_minutes,
+                       created_by=task.created_by, created_at=now)  # stays "added by" the same person
+        if new.end_date and new.end_date < new.start_date:
+            raise ApiError(422, fields={"endDate": "Cannot be before today."})
+        db.add(new)
+        db.flush()
+        task.ended_at = now
+        task.replaced_by = new.id
+        current = new
+    record_change(db, patient.id, actor.id, "care_plan", {"task": before}, {"task": _snapshot(current)})
+    return current
+
+
+def plan_remove(db: Session, actor: User, task: CareTask, patient: User) -> None:
+    if task.ended_at is None:
+        task.ended_at = utcnow()
+        record_change(db, patient.id, actor.id, "care_plan", {"removed": _snapshot(task)}, None)
 
 
 def _days_out(db: Session, days: list[ct.PatientDay]) -> list[PatientDayOut]:
@@ -176,6 +245,80 @@ def log_extra(body: ExtraIn, me: CurrentUser = Depends(patient_or_caregiver), db
                     done_at=extra.done_at)
 
 
+# --- planning from the app (permission tasks.plan) --------------------------------
+
+def _plan_patient(db: Session, me: CurrentUser, requested: uuid.UUID | None) -> User:
+    if me.role == "patient":
+        if requested not in (None, me.id):
+            raise ApiError(404)
+        return me.user
+    linked = access.linked_patient_ids(db, me.id)
+    target = requested or (linked[0] if len(linked) == 1 else None)
+    if target is None:
+        raise ApiError(422, fields={"patientId": "Choose which linked patient this is for."})
+    if target not in linked:
+        raise ApiError(404)
+    return db.get(User, target)
+
+
+def _own_task(db: Session, me: CurrentUser, task_id: uuid.UUID) -> tuple[CareTask, User]:
+    """A task this person added. Tasks planned by supervisors stay theirs to change."""
+    task, patient = _task_for_app(db, me, task_id)
+    if task.created_by != me.id:
+        raise ApiError(403, "Only the person who added this task, or a supervisor, can change it.",
+                       code="not_your_task")
+    return task, patient
+
+
+@router.get("/tasks/plan", response_model=list[CareTaskOut])
+def app_plan(patient_id: Annotated[uuid.UUID | None, Query(alias="patientId")] = None,
+             me: CurrentUser = Depends(patient_or_caregiver), db: Session = Depends(get_db)):
+    """The care plan (current tasks) of the patient, or of the caregiver's linked patients."""
+    _require(db, me, "tasks.view")
+    ids = access.readable_patient_ids(db, me.user)
+    if patient_id is not None:
+        if patient_id not in ids:
+            raise ApiError(404)
+        ids = [patient_id]
+    return tasks_out(db, list(db.scalars(_plan_query(ids, False)))) if ids else []
+
+
+@router.post("/tasks/plan", response_model=CareTaskOut, status_code=201)
+def app_plan_add(body: CareTaskAppIn, me: CurrentUser = Depends(patient_or_caregiver),
+                 db: Session = Depends(get_db)):
+    """Add a task to a linked client's plan. Needs the tasks.plan permission, which a
+    supervisor gives (to one caregiver on their profile, or to a role)."""
+    _require(db, me, "tasks.plan")
+    patient = _plan_patient(db, me, body.patient_id)
+    task = plan_add(db, me.user, patient, CareTaskIn(**body.model_dump(exclude={"patient_id"})))
+    if me.role == "caregiver":
+        access.log_access(db, me.user, patient.id, "tasks.plan")
+    db.commit()
+    return tasks_out(db, [task])[0]
+
+
+@router.patch("/tasks/plan/{task_id}", response_model=CareTaskOut)
+def app_plan_change(task_id: uuid.UUID, body: CareTaskUpdateIn, me: CurrentUser = Depends(patient_or_caregiver),
+                    db: Session = Depends(get_db)):
+    """Change a task you added (a new schedule starts a new version from now)."""
+    _require(db, me, "tasks.plan")
+    task, patient = _own_task(db, me, task_id)
+    current = plan_change(db, me.user, task, patient, body)
+    db.commit()
+    return tasks_out(db, [current])[0]
+
+
+@router.delete("/tasks/plan/{task_id}", status_code=204)
+def app_plan_remove(task_id: uuid.UUID, me: CurrentUser = Depends(patient_or_caregiver),
+                    db: Session = Depends(get_db)) -> Response:
+    """Remove a task you added, from now. Past days are kept."""
+    _require(db, me, "tasks.plan")
+    task, patient = _own_task(db, me, task_id)
+    plan_remove(db, me.user, task, patient)
+    db.commit()
+    return Response(status_code=204)
+
+
 # --- admin panel ---------------------------------------------------------------------
 
 def _patient(db: Session, me: CurrentUser, patient_id: uuid.UUID) -> User:
@@ -196,66 +339,26 @@ def _task(db: Session, me: CurrentUser, task_id: uuid.UUID) -> tuple[CareTask, U
 def care_plan(patient_id: uuid.UUID, include_ended: Annotated[bool, Query(alias="includeEnded")] = False,
               me: CurrentUser = Depends(need("tasks.view")), db: Session = Depends(get_db)):
     patient = _patient(db, me, patient_id)
-    query = select(CareTask).where(CareTask.patient_id == patient.id)
-    if not include_ended:
-        query = query.where(CareTask.ended_at.is_(None))
-    return [task_out(t) for t in db.scalars(query.order_by(CareTask.time_of_day.nulls_last(), CareTask.title))]
+    return tasks_out(db, list(db.scalars(_plan_query([patient.id], include_ended))))
 
 
 @admin_router.post("/patients/{patient_id}/tasks", response_model=CareTaskOut, status_code=201)
 def add_task(patient_id: uuid.UUID, body: CareTaskIn, me: CurrentUser = Depends(need("tasks.manage")),
              db: Session = Depends(get_db)):
     patient = _patient(db, me, patient_id)
-    task = CareTask(patient_id=patient.id, title=body.title, instructions=body.instructions,
-                    time_of_day=body.parsed_time(), days=body.days,
-                    start_date=body.start_date or ct.local_today(patient), end_date=body.end_date,
-                    grace_minutes=body.grace_minutes, created_by=me.id, created_at=utcnow())
-    if task.end_date and task.end_date < task.start_date:
-        raise ApiError(422, fields={"endDate": "Cannot be before the start."})
-    db.add(task)
-    db.flush()
-    record_change(db, patient.id, me.id, "care_plan", None, {"added": _snapshot(task)})
+    task = plan_add(db, me.user, patient, body)
     db.commit()
-    return task_out(task)
+    return tasks_out(db, [task])[0]
 
 
 @admin_router.patch("/tasks/{task_id}", response_model=CareTaskOut)
 def change_task(task_id: uuid.UUID, body: CareTaskUpdateIn, me: CurrentUser = Depends(need("tasks.manage")),
                 db: Session = Depends(get_db)):
-    """Title and instructions change in place. A new time, days, end date or grace starts a
-    new version from now (the old one ends), so past days keep their plan. Returns the
-    current version."""
+    """See plan_change. Returns the current version."""
     task, patient = _task(db, me, task_id)
-    if task.ended_at is not None:
-        raise ApiError(409, "This task was removed or replaced.", code="task_ended")
-    sent = body.model_fields_set
-    before = _snapshot(task)
-    if "title" in sent and body.title:
-        task.title = body.title
-    if "instructions" in sent:
-        task.instructions = body.instructions
-    schedule = sent & {"time", "days", "end_date", "grace_minutes"}
-    current = task
-    if schedule:
-        now = utcnow()
-        new = CareTask(patient_id=task.patient_id, title=task.title, instructions=task.instructions,
-                       time_of_day=_parse_time(body.time) if "time" in sent else task.time_of_day,
-                       days=body.days if "days" in sent and body.days else task.days,
-                       start_date=max(task.start_date, ct.local_today(patient)),
-                       end_date=body.end_date if "end_date" in sent else task.end_date,
-                       grace_minutes=body.grace_minutes if "grace_minutes" in sent and body.grace_minutes is not None
-                       else task.grace_minutes,
-                       created_by=me.id, created_at=now)
-        if new.end_date and new.end_date < new.start_date:
-            raise ApiError(422, fields={"endDate": "Cannot be before today."})
-        db.add(new)
-        db.flush()
-        task.ended_at = now
-        task.replaced_by = new.id
-        current = new
-    record_change(db, patient.id, me.id, "care_plan", {"task": before}, {"task": _snapshot(current)})
+    current = plan_change(db, me.user, task, patient, body)
     db.commit()
-    return task_out(current)
+    return tasks_out(db, [current])[0]
 
 
 @admin_router.delete("/tasks/{task_id}", status_code=204)
@@ -263,10 +366,8 @@ def remove_task(task_id: uuid.UUID, me: CurrentUser = Depends(need("tasks.manage
                 db: Session = Depends(get_db)) -> Response:
     """Take a task off the plan from now. Past days and their marks are kept."""
     task, patient = _task(db, me, task_id)
-    if task.ended_at is None:
-        task.ended_at = utcnow()
-        record_change(db, patient.id, me.id, "care_plan", {"removed": _snapshot(task)}, None)
-        db.commit()
+    plan_remove(db, me.user, task, patient)
+    db.commit()
     return Response(status_code=204)
 
 

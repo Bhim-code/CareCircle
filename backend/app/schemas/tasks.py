@@ -58,6 +58,11 @@ class CareTaskIn(CamelModel):
         return _parse_time(self.time)
 
 
+class CareTaskAppIn(CareTaskIn):
+    # Caregivers with more than one linked patient say which one.
+    patient_id: uuid.UUID | None = None
+
+
 class CareTaskUpdateIn(CamelModel):
     """Send only what changes. Title and instructions change in place; changing the
     schedule (time, days, endDate, graceMinutes) starts a new version of the task from now."""
@@ -98,6 +103,8 @@ class CareTaskOut(CamelModel):
     created_at: UtcDateTime
     ended_at: UtcDateTime | None
     replaced_by: uuid.UUID | None
+    # Who added the task (a supervisor, or a caregiver with the tasks.plan permission).
+    created_by: PersonOut | None = None
 
 
 class CompletionOut(CamelModel):

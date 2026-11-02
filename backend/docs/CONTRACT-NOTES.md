@@ -91,6 +91,12 @@ default). Permissions: `tasks.view`, `tasks.complete`.
 - `DELETE /tasks/{taskId}/complete?day=`: undo your own mark within 24 hours.
 - `POST /tasks/extra` `{ "title": "Walk to the park", "note": "...", "patientId"? }`: work
   done that wasn't in the plan.
+- **Planning from the app** (only if a supervisor gave the person the `tasks.plan`
+  permission; check `GET /me` `permissions`): `GET /tasks/plan?patientId=` lists the plan;
+  `POST /tasks/plan` `{ "title", "time": "16:00" | null, "days": [1..7], "instructions"?,
+  "patientId"? }` adds a task for a linked client; `PATCH` / `DELETE /tasks/plan/{id}`
+  change or remove **tasks you added yourself** (403 `not_your_task` for others). Each
+  task has `createdBy`.
 - When a task with a time is not marked by its deadline, the linked caregivers get an email
   (the job `python -m app.jobs`); supervisors too if it is still not marked 3 hours later.
 

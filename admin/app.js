@@ -115,7 +115,7 @@ const ACTION_LABEL = {
   'caregiver.view': 'Opened caregiver', 'user.company': 'Changed company',
   'profile.view': 'Opened profile', 'role.assign': 'Changed role', 'permissions.grant': 'Changed permissions',
   'documents.list': 'Viewed documents in the app', 'documents.upload': 'Uploaded a document',
-  'tasks.list': 'Viewed care tasks in the app', 'tasks.complete': 'Marked a care task', 'tasks.extra': 'Logged extra work',
+  'tasks.list': 'Viewed care tasks in the app', 'tasks.plan': 'Added a care task from the app', 'tasks.complete': 'Marked a care task', 'tasks.extra': 'Logged extra work',
   'admin.change.denied': 'Tried to change an account',
 };
 const STATUS_CLASS = { taken: 'text-taken', due: 'text-due', missed: 'text-missed', upcoming: 'text-upcoming' };
@@ -1183,6 +1183,8 @@ async function carePlanTab(host, p) {
     h('div', {},
       h('div', {}, h('span', { class: 'mr-3 font-bold' }, t.time || 'Any time'), h('span', { class: 'font-bold' }, t.title)),
       h('p', { class: 'text-sm text-muted' }, `${daysText(t.days)}, from ${fmtDate(t.startDate)}${t.endDate ? ` until ${fmtDate(t.endDate)}` : ''}${t.time ? `, missed after ${t.graceMinutes} min` : ''}`),
+      t.createdBy ? h('p', { class: `text-sm ${t.createdBy.role === 'caregiver' ? 'text-sage-dark' : 'text-muted'}` },
+        `Added by ${t.createdBy.name}${t.createdBy.role === 'caregiver' ? ' (caregiver, from the app)' : ''}`) : null,
       t.instructions ? h('p', { class: 'mt-1 max-w-prose text-sm' }, t.instructions) : null),
     editable ? h('div', { class: 'flex gap-3 text-sm' },
       h('button', { class: 'underline underline-offset-2', onclick: () => host.replaceChildren(taskForm(p, t, () => carePlanTab(host, p))) }, 'Change'),
