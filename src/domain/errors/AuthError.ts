@@ -7,6 +7,7 @@ export type AuthErrorCode =
   | 'rate_limited'
   | 'network'
   | 'profile_unavailable'
+  | 'staff_account'
   | 'unknown';
 
 /**

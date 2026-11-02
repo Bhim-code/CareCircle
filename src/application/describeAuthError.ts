@@ -9,6 +9,7 @@ const MESSAGES: Record<AuthErrorCode, string> = {
   rate_limited: 'Too many attempts. Wait a minute, then try again.',
   network: 'Cannot reach the server. Check your connection and try again.',
   profile_unavailable: 'Your account loaded without its profile. Try again, or contact support.',
+  staff_account: 'This account is for the CareCircle admin page, not the app. Sign in there instead.',
   unknown: 'Something went wrong. Try again in a moment.',
 };
 
