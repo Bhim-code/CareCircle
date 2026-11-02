@@ -1,10 +1,10 @@
 """Run the background jobs.
 
     python -m app.jobs              # keep running: the normal way (a second terminal or service)
-    python -m app.jobs once alerts  # run one job now: reminders | alerts | due | cleanup
+    python -m app.jobs once alerts  # run one job now: reminders | alerts | task-alerts | due | cleanup
 
 Schedule while running:
-    every minute     due-dose push notifications, missed-dose alerts
+    every minute     due-dose push notifications, missed-dose and missed-task alerts
     every 30 minutes create today's and tomorrow's reminders
     every day        cleanup
 """
@@ -27,6 +27,7 @@ JOBS = {
     "reminders": (tasks.generate_reminders, 30 * 60),
     "due": (tasks.send_due_notifications, 60),
     "alerts": (tasks.send_missed_dose_alerts, 60),
+    "task-alerts": (tasks.send_task_alerts, 60),
     "cleanup": (tasks.cleanup, 24 * 60 * 60),
 }
 

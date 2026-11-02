@@ -66,6 +66,34 @@ await fetch(`${API}/health-records`, { method: 'POST', headers: { Authorization:
 - Please check the current Expo docs for the image and document picker APIs; they change
   between SDK versions.
 
+## 0c. New: daily care tasks ("Today's tasks" screen)
+
+Supervisors plan tasks per client in the admin panel (e.g. "Morning check-in 09:00, every
+day"). Caregivers tick them off in the app; patients can see their own day (read-only by
+default). Permissions: `tasks.view`, `tasks.complete`.
+
+- `GET /tasks?day=YYYY-MM-DD&patientId=`: one item per client (a patient gets their own;
+  a caregiver gets each linked patient). `day` is the client's local date, default today.
+  ```json
+  { "patient": {"id","name","role"}, "day": "2026-10-15",
+    "counts": {"done":1,"late":0,"skipped":0,"missed":1,"due":0,"upcoming":2},
+    "tasks": [{ "taskId", "title", "instructions", "time": "09:00" | null, "dueAt",
+                "status": "upcoming|due|done|late|skipped|missed",
+                "completion": null | {"status":"done|skipped","reason","note","doneBy":{...},"doneAt"} }],
+    "extras": [{ "id", "title", "note", "doneBy", "doneAt" }] }
+  ```
+  `time: null` means "any time that day". Status is worked out by the server (deadline =
+  time + the task's grace minutes, or the end of the day for any-time tasks).
+- `POST /tasks/{taskId}/complete` `{ "status": "done" }` or
+  `{ "status": "skipped", "reason": "Client refused" }`, optional `note` and `day`
+  (default today; not in the future; at most 7 days back). Returns the client's updated
+  day. **409** if already marked; **422** if not planned that day.
+- `DELETE /tasks/{taskId}/complete?day=`: undo your own mark within 24 hours.
+- `POST /tasks/extra` `{ "title": "Walk to the park", "note": "...", "patientId"? }`: work
+  done that wasn't in the plan.
+- When a task with a time is not marked by its deadline, the linked caregivers get an email
+  (the job `python -m app.jobs`); supervisors too if it is still not marked 3 hours later.
+
 ## 1. Changes the app must handle
 
 | What | Why | What the app does |

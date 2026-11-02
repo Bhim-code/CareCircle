@@ -46,6 +46,9 @@ The ER diagram is in `backend/README.md`. Main tables:
 | `medicines`, `reminders` | What to take and when (local times), and each dose as an exact UTC moment with when it was confirmed |
 | `alerts_sent` | One row per missed-dose alert; its unique key makes "send once" a database rule |
 | `health_documents` | A patient's documents: title, category, date, and (since migration 0005) the uploaded file's private storage key, type, size, display name, who uploaded it, and when it was deleted (hidden; the file is kept) |
+| `care_tasks` | The care plan: tasks per client (title, instructions, local time or "any time", weekdays, dates, grace minutes). A schedule change ends the task and starts a new version, so past days keep their plan. |
+| `task_completions` | What happened each day: done or skipped (with reason), by whom and when; once per task per day (database rule). Rows without a task are extra work. |
+| `task_alerts` | Missed-task alerts, once per task, day, person and stage (caregiver, then supervisor) |
 | `record_entries`, `record_entry_history` | Written records and a full copy of every earlier version |
 | `entry_photos` | Private photos attached to records |
 | `user_preferences`, `push_tokens` | Settings and phone tokens |
@@ -140,7 +143,7 @@ How this is enforced:
 
 ## 5. Testing
 
-`pytest` runs 171 automated tests against a real PostgreSQL database built from the
+`pytest` runs 189 automated tests against a real PostgreSQL database built from the
 migrations (about 20 seconds). Each test starts with empty tables.
 
 | File | What it proves |
@@ -149,6 +152,7 @@ migrations (about 20 seconds). Each test starts with empty tables.
 | `test_entries.py` (28) | Two patients and two caregivers: nobody reads or edits anyone else's records (404 by id, too); role/kind table; server-set fields; history kept; ending a link removes access; photo type, size, ownership, expiry and forged links |
 | `test_medicines_reminders.py` (13) | Own reminders only; the patient's local day; daylight saving; idempotent generation; "I took it" only by the owner and never by the server |
 | `test_admin.py` (9) | Patients and caregivers refused (and logged); supervisor cannot change patients or settings; every view and export logged; CSV injection safe; patients see who viewed them |
+| `test_care_tasks.py` (18) | Status rules over a day (upcoming, due, done, late, skipped, missed) in the client's time zone; tasks added after their time start the next day; weekdays, dates, removal; rescheduling keeps history; done once, undo by the same person, skip needs a reason, no future days; strangers and other companies refused; extra work; permissions; the Today table; caregiver-then-supervisor alerts once, with no task name in the email |
 | `test_documents.py` (23) | Patient and linked caregiver upload real PDFs, JPEG, PNG and iPhone HEIC (converted to JPEG); GPS and camera data removed; fake, broken, oversized, scripted and attachment-carrying files refused; strangers cannot upload, list or open (404, forged and expired links fail); ending a link ends access; permissions switch uploading and viewing off; delete rules; storage cannot escape its folder |
 | `test_people_roles.py` (17) | New sign-ups wait with no access; assigning a role unlocks the app and signs them out; supervisors can make supervisors; nobody changes their own role or permissions; last supervisor protected; only admins give admin; patient-to-caregiver ends links but keeps records; extra permissions and role permissions take effect at once; custom roles; a limited supervisor role is enforced; create person with set-password email; profile, photo and history (append-only); delete keeps records; other companies out of reach |
 | `test_companies.py` (16) | Two companies: each supervisor sees all of their own company's patients and caregivers and none of the other's (lists, search, by id, CSV, overview, access log); a supervisor can switch only their own company's caregivers on or off (signs them out at once); only admins create companies and move people |

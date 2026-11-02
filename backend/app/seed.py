@@ -31,11 +31,13 @@ from app.core.config import get_settings
 from app.core.security import hash_password
 from app.db.models import (
     CareLink,
+    CareTask,
     Organization,
     HealthDocument,
     Medicine,
     RecordEntry,
     Reminder,
+    TaskCompletion,
     User,
     UserPreferences,
 )
@@ -165,6 +167,39 @@ def seed() -> None:
         _demo_file(db, ana, ana, "Cardiology letter", "discharge_summary", today - timedelta(days=9),
                    _demo_pdf("Cardiology clinic - follow-up letter (demo)"), "cardiology-letter.pdf",
                    "application/pdf")
+
+        # Care plans, with a week of history (mostly done, one skipped, one missed).
+        sue = db.scalar(select(User).where(User.email == f"sue@{DOMAIN}"))
+        plan = [(ana, "Morning check-in", time(9, 0), [1, 2, 3, 4, 5, 6, 7], "Ask about sleep, pain and appetite."),
+                (ana, "Evening medication check", time(20, 0), [1, 2, 3, 4, 5, 6, 7],
+                 "Check the evening Metformin was taken; note any side effects."),
+                (ana, "Shower assistance", None, [1, 3, 5], "Use the shower chair. Check skin for redness."),
+                (bob, "Blood pressure reading", time(10, 0), [1, 2, 3, 4, 5, 6, 7], "Record it as a medical note.")]
+        for patient, title, at, days, instructions in plan:
+            task = CareTask(patient_id=patient.id, title=title, time_of_day=at, days=days,
+                            start_date=today - timedelta(days=14), instructions=instructions,
+                            created_by=sue.id, created_at=long_ago)
+            db.add(task)
+            db.flush()
+            for back in range(7, 0, -1):
+                day = today - timedelta(days=back)
+                if day.isoweekday() not in days:
+                    continue
+                roll = rng.random()
+                if title == "Evening medication check" and back == 2:
+                    continue  # one missed day
+                when = datetime.combine(day, at or time(14, 0), tzinfo=tz).astimezone(UTC) + \
+                    timedelta(minutes=rng.randint(0, 40))
+                if title == "Morning check-in" and back == 3:
+                    db.add(TaskCompletion(patient_id=patient.id, task_id=task.id, day=day, status="skipped",
+                                          reason="Client refused: felt tired", done_by=sam.id, done_at=when))
+                elif patient is ana or roll < 0.85:
+                    db.add(TaskCompletion(patient_id=patient.id, task_id=task.id, day=day, status="done",
+                                          note="All fine." if roll < 0.3 else None,
+                                          done_by=sam.id if patient is ana else sue.id, done_at=when))
+        db.add(TaskCompletion(patient_id=ana.id, task_id=None, day=today - timedelta(days=1), status="done",
+                              title="Walk to the park", note="20 minutes, she enjoyed it.", done_by=sam.id,
+                              done_at=now - timedelta(days=1)))
 
         def entry(author: User, kind: str, title: str, notes: str, hours_ago: int,
                   patient: User | None = None, **extra) -> None:

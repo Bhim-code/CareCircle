@@ -64,6 +64,8 @@ class Settings(BaseSettings):
     # "log" writes push notifications to the log; "expo" sends them via Expo.
     push_provider: Literal["log", "expo"] = "log"
     missed_dose_after_minutes: int = Field(default=60, ge=1)
+    # A care task still not done this long after its deadline is also sent to supervisors.
+    task_escalate_after_minutes: int = Field(default=180, ge=0)
 
     @field_validator("database_url")
     @classmethod

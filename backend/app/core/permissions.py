@@ -23,6 +23,7 @@ PERMISSIONS: dict[str, tuple[str, str]] = {
     "records.view": ("Admin panel", "Open patients' records, reminders and documents"),
     "records.export": ("Admin panel", "Export records and reminders to CSV"),
     "audit.view": ("Admin panel", "See the access log"),
+    "tasks.manage": ("Admin panel", "Plan clients' daily care tasks"),
     # App
     "entries.write.medical": ("App", "Write medical records"),
     "entries.write.behavioural": ("App", "Write behavioural records"),
@@ -30,6 +31,8 @@ PERMISSIONS: dict[str, tuple[str, str]] = {
     "entries.write.medication": ("App", "Write medication records"),
     "documents.upload": ("App", "Upload health documents (own, or for linked patients)"),
     "documents.view": ("App", "Open health documents (own, or of linked patients)"),
+    "tasks.view": ("Care tasks", "See the care plan and what was done each day"),
+    "tasks.complete": ("Care tasks", "Mark care tasks done or skipped, and log extra work"),
 }
 
 PANEL_PERMISSIONS = [code for code, (group, _) in PERMISSIONS.items() if group == "Admin panel"]
@@ -43,12 +46,12 @@ KINDS = ("patient", "caregiver", "supervisor", "admin")
 DEFAULT_ROLES: list[dict] = [
     {"name": "Patient", "kind": "patient", "description": "Receives care and medicine reminders",
      "permissions": ["entries.write.medical", "entries.write.incident", "entries.write.medication",
-                     "documents.upload", "documents.view"]},
+                     "documents.upload", "documents.view", "tasks.view"]},
     {"name": "Caregiver", "kind": "caregiver", "description": "Looks after linked patients",
      "permissions": ["entries.write.behavioural", "entries.write.incident", "entries.write.medication",
-                     "documents.upload", "documents.view"]},
+                     "documents.upload", "documents.view", "tasks.view", "tasks.complete"]},
     {"name": "Supervisor", "kind": "supervisor", "description": "Runs the care team in the admin panel",
-     "permissions": PANEL_PERMISSIONS},
+     "permissions": PANEL_PERMISSIONS + ["tasks.view", "tasks.complete"]},
     {"name": "Admin", "kind": "admin", "description": "Platform administrator (every permission)",
      "permissions": list(PERMISSIONS)},
 ]

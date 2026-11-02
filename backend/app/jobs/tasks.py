@@ -18,6 +18,9 @@ from sqlalchemy.orm import Session
 from app.core.security import utcnow
 from app.db.models import (
     AlertSent,
+    CareTask,
+    TaskAlert,
+    TaskCompletion,
     AuthSession,
     CareLink,
     PasswordResetToken,
@@ -29,6 +32,7 @@ from app.db.models import (
 from app.jobs import notify
 from app.services import photos
 from app.services.reminders import generate_upcoming
+from app.services import care_tasks as ct
 from app.services.stats import missed_after
 
 logger = logging.getLogger("carecircle.jobs")
@@ -152,3 +156,76 @@ def cleanup(db: Session, now: datetime | None = None) -> int:
     removed += db.execute(delete(PasswordResetToken).where(PasswordResetToken.expires_at < old)).rowcount or 0
     db.commit()
     return removed
+
+
+# --- missed care tasks -------------------------------------------------------------
+
+TASK_ALERT_LOOKBACK = timedelta(hours=24)
+
+
+def _claim_task_alert(db: Session, task_id, day, recipient_id, stage: str) -> bool:
+    claimed = db.execute(insert(TaskAlert).values(task_id=task_id, day=day, recipient_id=recipient_id, stage=stage)
+                         .on_conflict_do_nothing(constraint="task_alerts_once").returning(TaskAlert.id)).first()
+    db.commit()
+    return claimed is not None
+
+
+def _release_task_alert(db: Session, task_id, day, recipient_id, stage: str) -> None:
+    db.execute(delete(TaskAlert).where(TaskAlert.task_id == task_id, TaskAlert.day == day,
+                                       TaskAlert.recipient_id == recipient_id, TaskAlert.stage == stage))
+    db.commit()
+
+
+def send_task_alerts(db: Session, now: datetime | None = None) -> int:
+    """A care task with a time, not marked by its deadline (time + grace): email the client's
+    linked caregivers. Still not marked TASK_ESCALATE_AFTER_MINUTES later: also email the
+    company's supervisors. Each alert once. "Any time" tasks are not alerted (they show as
+    missed in the panel the next day). The message names no task, only the time."""
+    from app.core.config import get_settings
+
+    now = now or utcnow()
+    escalate = timedelta(minutes=get_settings().task_escalate_after_minutes)
+    tasks = db.scalars(select(CareTask).where(
+        CareTask.time_of_day.is_not(None),
+        (CareTask.ended_at.is_(None)) | (CareTask.ended_at > now - TASK_ALERT_LOOKBACK))).all()
+    sent = 0
+    for task in tasks:
+        patient = db.get(User, task.patient_id)
+        if patient is None or not patient.is_active or patient.role != "patient":
+            continue
+        tz = ZoneInfo(patient.timezone)
+        today = now.astimezone(tz).date()
+        for day in (today - timedelta(days=1), today):
+            if not ct.scheduled_on(task, day, tz):
+                continue
+            late_since = ct.deadline(task, day, tz)
+            if not (late_since <= now < late_since + TASK_ALERT_LOOKBACK):
+                continue
+            if db.scalar(select(TaskCompletion.id).where(TaskCompletion.task_id == task.id,
+                                                         TaskCompletion.day == day)):
+                continue
+            when = ct.due_at(task, day, tz).strftime("%H:%M")
+            message = (f"A care task for {patient.name} planned for {when} ({patient.timezone} time) "
+                       f"on {day:%d %b} is not marked as done yet.")
+            recipients = [("caregiver", u) for u in db.scalars(
+                select(User).join(CareLink, CareLink.caregiver_id == User.id).where(
+                    CareLink.patient_id == patient.id, CareLink.status == "active", User.is_active.is_(True)))]
+            if now >= late_since + escalate and patient.organization_id:
+                recipients += [("supervisor", u) for u in db.scalars(select(User).where(
+                    User.role == "supervisor", User.is_active.is_(True),
+                    User.organization_id == patient.organization_id))]
+            for stage, person in recipients:
+                if not _claim_task_alert(db, task.id, day, person.id, stage):
+                    continue
+                try:
+                    ok = notify.email(person.email, f"CareCircle: a task for {patient.name} is not done",
+                                      f"Hello {person.name},\n\n{message}\n\nOpen CareCircle to see the day.")
+                except Exception:  # noqa: BLE001
+                    ok = False
+                if ok:
+                    sent += 1
+                else:
+                    _release_task_alert(db, task.id, day, person.id, stage)
+    if sent:
+        logger.info("Missed-task alerts sent: %d", sent)
+    return sent
