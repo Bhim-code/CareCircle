@@ -4,6 +4,7 @@ import type { IReminderService } from '../../domain/services/IReminderService';
 import { useNow } from '../hooks/useNow';
 import { useReminders } from '../hooks/useReminders';
 import { useAuth } from './AuthProvider';
+import { useMedicineList } from './MedicinesProvider';
 
 type RemindersValue = ReturnType<typeof useReminders>;
 
@@ -17,11 +18,13 @@ const RemindersContext = createContext<RemindersValue | null>(null);
 export function RemindersProvider({ service, children }: { service: IReminderService; children: ReactNode }) {
   const { user, policy } = useAuth();
   const now = useNow();
+  const { changeCount } = useMedicineList();
   const value = useReminders(
     service,
     user?.id ?? '',
     dayKey(now),
     Boolean(user && policy?.can('reminders.manage')),
+    changeCount,
   );
   return <RemindersContext.Provider value={value}>{children}</RemindersContext.Provider>;
 }

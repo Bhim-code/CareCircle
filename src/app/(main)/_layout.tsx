@@ -3,8 +3,15 @@ import { Tabs } from 'expo-router';
 import React, { useState } from 'react';
 import type { ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { createAlarmScheduler, createPreferencesStore, createRecordEntryService, createReminderService } from '@/container';
+import {
+  createAlarmScheduler,
+  createMedicineService,
+  createPreferencesStore,
+  createRecordEntryService,
+  createReminderService,
+} from '@/container';
 import { AlarmProvider } from '@/presentation/providers/AlarmProvider';
+import { MedicinesProvider } from '@/presentation/providers/MedicinesProvider';
 import { PreferencesProvider } from '@/presentation/providers/PreferencesProvider';
 import { RecordEntriesProvider } from '@/presentation/providers/RecordEntriesProvider';
 import { RemindersProvider } from '@/presentation/providers/RemindersProvider';
@@ -27,12 +34,14 @@ export default function MainLayout() {
   // Settings belong to the signed-in person, so they are only loaded in this part of the app.
   const [preferencesStore] = useState(createPreferencesStore);
   const [reminderService] = useState(createReminderService);
+  const [medicineService] = useState(createMedicineService);
   const [alarmScheduler] = useState(createAlarmScheduler);
   const [entryService] = useState(createRecordEntryService);
   const insets = useSafeAreaInsets();
 
   return (
     <PreferencesProvider store={preferencesStore}>
+      <MedicinesProvider service={medicineService}>
       <RemindersProvider service={reminderService}>
       <AlarmProvider scheduler={alarmScheduler} reminderService={reminderService}>
       <RecordEntriesProvider service={entryService}>
@@ -63,6 +72,7 @@ export default function MainLayout() {
       </RecordEntriesProvider>
       </AlarmProvider>
       </RemindersProvider>
+      </MedicinesProvider>
     </PreferencesProvider>
   );
 }

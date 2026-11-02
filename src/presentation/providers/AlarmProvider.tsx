@@ -17,6 +17,7 @@ import type { AlarmLook, AlarmPermission, IAlarmScheduler } from '../../domain/s
 import type { IReminderService } from '../../domain/services/IReminderService';
 import { useNow } from '../hooks/useNow';
 import { useAuth } from './AuthProvider';
+import { useMedicineList } from './MedicinesProvider';
 import { usePreferences } from './PreferencesProvider';
 import { useTodaysReminders } from './RemindersProvider';
 
@@ -74,6 +75,8 @@ export function AlarmProvider({ scheduler, reminderService, children }: AlarmPro
   const { preferences } = usePreferences();
   const { status: todayStatus, reminders: today, acknowledge, skip } = useTodaysReminders();
   const now = useNow();
+  // Changes when a medicine is added or stopped, so tomorrow's alarms are planned again.
+  const { changeCount: medicineChanges } = useMedicineList();
 
   const enabled = Boolean(user && policy?.can('reminders.acknowledge'));
   const [permission, setPermission] = useState<AlarmPermission>('undetermined');
@@ -123,7 +126,7 @@ export function AlarmProvider({ scheduler, reminderService, children }: AlarmPro
     return () => {
       active = false;
     };
-  }, [reminderService, enabled, user, tomorrowKey]);
+  }, [reminderService, enabled, user, tomorrowKey, medicineChanges]);
 
   // Keep the phone's waiting alarms matching the doses.
   const wantAlarms = enabled && preferences.reminderNotifications && permission === 'granted';

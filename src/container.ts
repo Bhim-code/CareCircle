@@ -4,12 +4,14 @@ import type { IAlarmScheduler } from './domain/services/IAlarmScheduler';
 import type { IAuthService } from './domain/services/IAuthService';
 import type { IDevControls } from './domain/services/IDevControls';
 import type { IHealthRecordService } from './domain/services/IHealthRecordService';
+import type { IMedicineService } from './domain/services/IMedicineService';
 import type { IPreferencesStore } from './domain/services/IPreferencesStore';
 import type { IRecordEntryService } from './domain/services/IRecordEntryService';
 import type { IReminderService } from './domain/services/IReminderService';
 import { DevModeAuthService } from './infrastructure/dev/DevModeAuthService';
 import { DEMO_ACCOUNTS, DemoAuthService, type DemoAccount } from './infrastructure/demo/DemoAuthService';
 import { DemoHealthRecordService } from './infrastructure/demo/DemoHealthRecordService';
+import { DemoMedicineService } from './infrastructure/demo/DemoMedicineService';
 import { DemoRecordEntryService } from './infrastructure/demo/DemoRecordEntryService';
 import { DemoReminderService } from './infrastructure/demo/DemoReminderService';
 import { NotifyKitAlarmScheduler } from './infrastructure/notifications/NotifyKitAlarmScheduler';
@@ -17,10 +19,12 @@ import { NoopAlarmScheduler } from './infrastructure/notifications/NoopAlarmSche
 import { AsyncPreferencesStore } from './infrastructure/storage/AsyncPreferencesStore';
 import { ApiClient } from './infrastructure/http/ApiClient';
 import { HttpAuthService } from './infrastructure/http/HttpAuthService';
+import { HttpMedicineService } from './infrastructure/http/HttpMedicineService';
 import { HttpReminderService } from './infrastructure/http/HttpReminderService';
 import { SkippedDoseStore } from './infrastructure/http/SkippedDoseStore';
 import { TokenStore } from './infrastructure/http/TokenStore';
 import { AsyncSessionStorage } from './infrastructure/storage/AsyncSessionStorage';
+import { EmptyMedicineService } from './infrastructure/supabase/EmptyMedicineService';
 import { EmptyRecordEntryService } from './infrastructure/supabase/EmptyRecordEntryService';
 import { EmptyReminderService } from './infrastructure/supabase/EmptyReminderService';
 import { createSupabaseClient } from './infrastructure/supabase/createSupabaseClient';
@@ -102,11 +106,29 @@ export function createPreferencesStore(): IPreferencesStore {
  * otherwise nothing (an empty list).
  */
 export function createReminderService(): IReminderService {
-  if (shouldUseDemo()) return new DemoReminderService();
+  if (shouldUseDemo()) return new DemoReminderService(300, sharedDemoMedicines());
   if (isApiConfigured) {
     return new HttpReminderService(createApiClient(), new SkippedDoseStore(new AsyncSessionStorage()));
   }
   return new EmptyReminderService();
+}
+
+let demoMedicines: DemoMedicineService | null = null;
+
+/** In demo mode the reminders and the medicines must share one list, so adding a medicine adds its doses. */
+function sharedDemoMedicines(): DemoMedicineService {
+  demoMedicines ??= new DemoMedicineService();
+  return demoMedicines;
+}
+
+/**
+ * Medicines make the same choice: made-up demo medicines in development, the
+ * CareCircle backend when its address is set, otherwise nothing.
+ */
+export function createMedicineService(): IMedicineService {
+  if (shouldUseDemo()) return sharedDemoMedicines();
+  if (isApiConfigured) return new HttpMedicineService(createApiClient());
+  return new EmptyMedicineService();
 }
 
 /**
