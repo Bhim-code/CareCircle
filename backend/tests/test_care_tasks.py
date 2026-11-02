@@ -293,3 +293,67 @@ def test_waiting_accounts_cannot_use_tasks(client):
     body = client.post("/auth/sign-up", json={"name": "Pat", "email": "pat@test.example",
                                               "password": "correct-horse-1"}).json()
     assert client.get("/tasks", headers={"Authorization": f"Bearer {body['accessToken']}"}).status_code == 403
+
+
+# --- caregivers allowed to plan (permission tasks.plan) -----------------------------
+
+def test_caregiver_needs_permission_to_add_tasks(client, team):
+    sam = team["sam"]
+    body = {"title": "Evening walk", "time": "18:00"}
+    assert client.post("/tasks/plan", json=body, headers=sam.auth).status_code == 403
+    # The supervisor gives Sam the permission on his profile.
+    given = client.put(f"/admin/users/{sam.id}/permissions", json={"permissions": ["tasks.plan"]},
+                       headers=team["sue"].auth)
+    assert given.status_code == 200
+    added = client.post("/tasks/plan", json=body, headers=sam.auth)
+    assert added.status_code == 201
+    assert added.json()["patientId"] == team["ana"].id and added.json()["createdBy"]["name"] == "Sam"
+    # It is part of Ana's plan, for everyone.
+    plan_titles = [t["title"] for t in client.get(f"/admin/patients/{team['ana'].id}/tasks",
+                                                  headers=team["sue"].auth).json()]
+    assert "Evening walk" in plan_titles
+    assert [t["title"] for t in client.get("/tasks/plan", headers=team["ana"].auth).json()] == ["Evening walk"]
+
+
+def test_caregiver_plans_only_for_linked_clients_and_changes_only_own_tasks(client, team):
+    sue, sam, eve = team["sue"], team["sam"], team["eve"]
+    client.put(f"/admin/users/{sam.id}/permissions", json={"permissions": ["tasks.plan"]}, headers=sue.auth)
+    assert client.post("/tasks/plan", json={"title": "X", "patientId": team["bob"].id},
+                       headers=sam.auth).status_code == 404
+    supervisors_task = plan(client, sue, team["ana"], title="Morning check-in")
+    mine = client.post("/tasks/plan", json={"title": "Puzzle time"}, headers=sam.auth).json()
+    assert client.patch(f"/tasks/plan/{supervisors_task['id']}", json={"title": "x"},
+                        headers=sam.auth).status_code == 403
+    moved = client.patch(f"/tasks/plan/{mine['id']}", json={"time": "16:00"}, headers=sam.auth)
+    assert moved.status_code == 200 and moved.json()["createdBy"]["name"] == "Sam"
+    # Caregivers cannot remove tasks, not even their own, and cannot end them by date.
+    assert client.delete(f"/tasks/plan/{moved.json()['id']}", headers=sam.auth).status_code == 405
+    ended = client.patch(f"/tasks/plan/{moved.json()['id']}", json={"endDate": str(date.today())},
+                         headers=sam.auth)
+    assert ended.status_code == 403 and ended.json()["error"]["code"] == "supervisor_only"
+    titles = [t["title"] for t in client.get("/tasks/plan", headers=sam.auth).json()]
+    assert "Puzzle time" in titles
+    # The supervisor can remove it.
+    assert client.delete(f"/admin/tasks/{moved.json()['id']}", headers=sue.auth).status_code == 204
+    # Eve (another client's caregiver, no permission) sees nothing of Ana's plan.
+    assert client.get(f"/tasks/plan?patientId={team['ana'].id}", headers=eve.auth).status_code == 404
+
+
+def test_supervisor_can_change_a_caregivers_task_and_history_shows_who(client, db, team):
+    sue, sam = team["sue"], team["sam"]
+    client.put(f"/admin/users/{sam.id}/permissions", json={"permissions": ["tasks.plan"]}, headers=sue.auth)
+    task = client.post("/tasks/plan", json={"title": "Puzzle time"}, headers=sam.auth).json()
+    assert client.patch(f"/admin/tasks/{task['id']}", json={"title": "Puzzles and cards"},
+                        headers=sue.auth).status_code == 200
+    changes = db.scalars(select(AccountChange).where(AccountChange.change == "care_plan")
+                         .order_by(AccountChange.id)).all()
+    assert [str(c.changed_by) for c in changes] == [sam.id, sue.id]
+
+
+def test_giving_tasks_plan_to_a_role(client, team):
+    adm = staff(client, "admin", "Al")
+    caregiver = {r["name"]: r for r in client.get("/admin/roles", headers=adm.auth).json()}["Caregiver"]
+    client.patch(f"/admin/roles/{caregiver['id']}", json={"permissions": caregiver["permissions"] + ["tasks.plan"]},
+                 headers=adm.auth)
+    assert client.post("/tasks/plan", json={"title": "Read the paper together"},
+                       headers=team["sam"].auth).status_code == 201

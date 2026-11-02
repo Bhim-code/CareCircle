@@ -26,7 +26,7 @@ Patients and caregivers are refused; they use the app. The port must match
 | Page | |
 |---|---|
 | Today | Every client's care tasks for a day: done, done late, skipped (with reason), missed, due, later; extra work by caregivers; mark done or skip; "Needs attention" filter |
-| Patient: Care plan | Plan a client's daily tasks (time or any time, weekdays, instructions); change or remove them |
+| Patient: Care plan | Plan a client's daily tasks (time or any time, weekdays, instructions); change or remove them; shows who added each task. To let a caregiver add tasks from the app, tick "Add care tasks…" on their profile (or for the Caregiver role). Caregivers can add and edit their own tasks; only supervisors remove tasks. |
 | People | Everyone in the company, with tabs (Waiting for a role, Patients, Caregivers, Supervisors). Each row: photo, role picker, on/off switch, Profile, Edit, Delete. "Add person" creates an account and emails a set-password link. |
 | Profile | Photo, details (phone, date of birth, address, emergency contact, notes), role, permissions (from the role, plus extra ones for this person), history of every change |
 | Roles & permissions | A grid of roles × permissions; tick to change what a role can do; create roles (e.g. "Night nurse") |

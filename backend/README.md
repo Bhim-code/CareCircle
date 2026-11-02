@@ -60,7 +60,7 @@ or `DATABASE_URL` in `.env` is wrong.
 pytest
 ```
 
-189 tests run against a real PostgreSQL database built from the migrations, in about
+193 tests run against a real PostgreSQL database built from the migrations, in about
 20 seconds. They always use `TEST_DATABASE_URL` (default `carecircle_test`), never your
 data. GitHub Actions runs them on every push (`.github/workflows/backend.yml`).
 
@@ -115,7 +115,7 @@ The full list with request and response shapes is at http://localhost:8000/docs.
 | Care links | `POST /care-links/invitations`, `GET /care-links`, `POST /care-links/invitations/{id}/accept`, `DELETE /care-links/{id}` |
 | Medicines | `GET/POST /medicines`, `DELETE /medicines/{id}`, `GET /reminders?day=`, `POST /reminders/{id}/acknowledge` |
 | Records | `GET/POST /health-records` (POST = upload a PDF or photo), `DELETE /health-records/{id}`, `GET /files/documents/{id}`, `GET/POST /entries`, `PUT /entries/{id}`, `POST /entries/photo`, `GET /files/photos/{id}` |
-| Care tasks | `GET /tasks`, `POST/DELETE /tasks/{id}/complete`, `POST /tasks/extra`; admin: `GET/POST /admin/patients/{id}/tasks`, `PATCH/DELETE /admin/tasks/{id}`, `GET /admin/today`, `POST/DELETE /admin/tasks/{id}/complete` |
+| Care tasks | `GET /tasks`, `POST/DELETE /tasks/{id}/complete`, `POST /tasks/extra`, `GET/POST /tasks/plan`, `PATCH /tasks/plan/{id}` (with `tasks.plan`; only supervisors remove tasks); admin: `GET/POST /admin/patients/{id}/tasks`, `PATCH/DELETE /admin/tasks/{id}`, `GET /admin/today`, `POST/DELETE /admin/tasks/{id}/complete` |
 | People and roles | `GET /admin/me`, `GET/POST /admin/users`, `GET/PATCH/DELETE /admin/users/{id}` (profile; delete = turn off), `PUT /admin/users/{id}/role`, `PUT /admin/users/{id}/permissions`, `POST/DELETE /admin/users/{id}/photo`, `GET /admin/permissions`, `GET/POST /admin/roles`, `PATCH/DELETE /admin/roles/{id}` |
 | Admin panel | `GET /admin/overview`, `/admin/users`, `PATCH /admin/users/{id}` (active, company), `/admin/patients/{id}` (+ `/reminders`, `/documents`, `/entries`, `.csv` exports), `/admin/caregivers/{id}`, `GET/POST /admin/organizations`, `/admin/access-log`. Supervisors see their own company only. |
 

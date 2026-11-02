@@ -33,6 +33,7 @@ PERMISSIONS: dict[str, tuple[str, str]] = {
     "documents.view": ("App", "Open health documents (own, or of linked patients)"),
     "tasks.view": ("Care tasks", "See the care plan and what was done each day"),
     "tasks.complete": ("Care tasks", "Mark care tasks done or skipped, and log extra work"),
+    "tasks.plan": ("Care tasks", "Add care tasks for linked clients from the app (and edit own ones; only supervisors remove tasks)"),
 }
 
 PANEL_PERMISSIONS = [code for code, (group, _) in PERMISSIONS.items() if group == "Admin panel"]
