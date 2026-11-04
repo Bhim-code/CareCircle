@@ -2,6 +2,8 @@
 
 import logging
 
+import email_validator
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -23,6 +25,18 @@ from app.core.https import HttpsOnlyMiddleware, SecurityHeadersMiddleware
 from app.core.rate_limit import RateLimiter
 
 
+def allow_demo_email_domain(settings: Settings) -> None:
+    """The demo accounts use @demo.carecircle.test. ".test" is a reserved name that the
+    email check refuses, so outside production it is allowed; otherwise a demo patient
+    could not invite the demo caregiver. Production keeps refusing it."""
+    reserved = email_validator.SPECIAL_USE_DOMAIN_NAMES
+    if settings.environment == "production":
+        if "test" not in reserved:
+            reserved.append("test")
+    elif "test" in reserved:
+        reserved.remove("test")
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     logging.basicConfig(level=settings.log_level)
@@ -36,6 +50,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         openapi_url="/openapi.json" if settings.show_docs else None,
     )
     app.state.rate_limiter = RateLimiter()
+    allow_demo_email_domain(settings)
 
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(

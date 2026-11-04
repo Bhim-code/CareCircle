@@ -71,3 +71,24 @@ def test_accepted_invitation_cannot_be_accepted_again(client):
     sam = sign_up(client, "Sam", "caregiver")
     link_id = link(client, ana, sam)
     assert client.post(f"/care-links/invitations/{link_id}/accept", headers=sam.auth).status_code == 404
+
+
+def test_demo_accounts_can_invite_each_other(client):
+    """Demo accounts use @demo.carecircle.test, which must work outside production."""
+    ana = sign_up(client, "Ana", "patient", email="ana@demo.carecircle.test")
+    sam = sign_up(client, "Sam", "caregiver", email="sam@demo.carecircle.test")
+    invite = client.post("/care-links/invitations", json={"email": sam.email}, headers=ana.auth)
+    assert invite.status_code == 201, invite.text
+
+
+def test_production_refuses_reserved_email_domains():
+    import email_validator
+
+    from app.core.config import Settings
+    from app.main import allow_demo_email_domain
+    allow_demo_email_domain(Settings(environment="production", jwt_secret="x" * 48, cors_origins=["https://a.example"]))
+    try:
+        assert "test" in email_validator.SPECIAL_USE_DOMAIN_NAMES
+    finally:
+        allow_demo_email_domain(Settings(environment="test"))
+    assert "test" not in email_validator.SPECIAL_USE_DOMAIN_NAMES
