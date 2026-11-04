@@ -236,7 +236,7 @@ function shell(current, content) {
         h('p', { class: 'text-sm text-muted' }, user.role === 'admin' ? 'Administrator, all companies' : (s.roleName || 'Supervisor')),
         s.company ? h('p', { class: 'text-sm text-muted' }, s.company) : null,
         h('div', { class: 'mt-2' }, signOut)) : null),
-    h('main', { id: 'main', tabindex: '-1', class: 'mx-auto w-full max-w-6xl px-4 py-8 md:px-10' }, content));
+    h('main', { id: 'main', tabindex: '-1', class: 'mx-auto w-full min-w-0 max-w-6xl px-4 py-8 md:px-10' }, content));
 }
 
 function brandMark() {
