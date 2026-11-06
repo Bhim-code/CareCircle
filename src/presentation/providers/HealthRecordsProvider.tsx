@@ -1,6 +1,6 @@
 import React, { createContext, useContext, type ReactNode } from 'react';
 import { DOCUMENTS_VIEW } from '../../application/documents';
-import { hasPermission } from '../../application/careTasks';
+import { hasPermission } from '../../application/permissions';
 import type { IHealthRecordService } from '../../domain/services/IHealthRecordService';
 import { useHealthRecords } from '../hooks/useHealthRecords';
 import { useAuth } from './AuthProvider';

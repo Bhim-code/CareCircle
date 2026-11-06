@@ -13,7 +13,8 @@ export function AccessRestricted({ yourRole }: AccessRestrictedProps) {
     <View style={styles.box} accessibilityRole="alert">
       <AppText variant="heading">Access restricted</AppText>
       <AppText color={colors.inkSoft}>
-        This part of CareCircle is not available to your account type.
+        Your account does not have permission to use this part of CareCircle. If you think that is a
+        mistake, ask your supervisor.
       </AppText>
       <AppText variant="caption" color={colors.inkSoft}>
         Your account type: {yourRole}

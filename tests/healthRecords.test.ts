@@ -9,7 +9,7 @@ import {
   formatRecordDate,
   sortRecords,
 } from '../src/application/healthRecords';
-import { policyFor } from '../src/application/policies/policyFor';
+import { DOCUMENTS_VIEW, hasPermission } from '../src/application/permissions';
 import { HEALTH_RECORD_CATEGORIES, type HealthRecord } from '../src/domain/entities/HealthRecord';
 import { DemoAuthService } from '../src/infrastructure/demo/DemoAuthService';
 import { DEMO_PATIENT_ID } from '../src/infrastructure/demo/demoIds';
@@ -95,10 +95,11 @@ describe('emptyMessageFor', () => {
   });
 });
 
-describe('records permission', () => {
-  it('lets patients see their own records, but not caregivers', () => {
-    assert.ok(policyFor('patient').can('records.view'));
-    assert.equal(policyFor('caregiver').can('records.view'), false);
+describe('documents permission', () => {
+  it('shows documents only to a person the server gave documents.view', () => {
+    assert.ok(hasPermission(['documents.view', 'tasks.view'], DOCUMENTS_VIEW));
+    assert.equal(hasPermission(['tasks.view'], DOCUMENTS_VIEW), false);
+    assert.equal(hasPermission(undefined, DOCUMENTS_VIEW), false);
   });
 });
 
