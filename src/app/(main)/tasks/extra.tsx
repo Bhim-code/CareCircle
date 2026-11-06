@@ -1,14 +1,15 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { TASKS_COMPLETE, hasPermission, validateExtra, type ExtraErrors } from '@/application/careTasks';
+import { validateExtra, type ExtraErrors } from '@/application/careTasks';
+import { TASKS_COMPLETE } from '@/application/permissions';
+import { usePermission } from '@/presentation/hooks/usePermission';
 import { AppText } from '@/presentation/components/AppText';
 import { Banner } from '@/presentation/components/Banner';
 import { Button } from '@/presentation/components/Button';
 import { Screen } from '@/presentation/components/Screen';
 import { TextField } from '@/presentation/components/TextField';
 import { TextLink } from '@/presentation/components/TextLink';
-import { useAuth } from '@/presentation/providers/AuthProvider';
 import { useCareTaskList } from '@/presentation/providers/CareTasksProvider';
 import { colors, spacing } from '@/presentation/theme/theme';
 
@@ -19,7 +20,6 @@ function goBack() {
 
 /** Write down work that was done but was not in the plan, such as "Walk to the park". */
 export default function ExtraWorkScreen() {
-  const { user } = useAuth();
   const { addExtra } = useCareTaskList();
   const params = useLocalSearchParams<{ clientId?: string; clientName?: string }>();
   const [title, setTitle] = useState('');
@@ -27,7 +27,7 @@ export default function ExtraWorkScreen() {
   const [errors, setErrors] = useState<ExtraErrors>({});
   const [saving, setSaving] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
-  const allowed = hasPermission(user?.permissions, TASKS_COMPLETE);
+  const allowed = usePermission(TASKS_COMPLETE);
 
   async function handleSave() {
     const check = validateExtra(title, note, params.clientId);

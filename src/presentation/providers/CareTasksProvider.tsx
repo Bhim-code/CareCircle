@@ -1,5 +1,5 @@
 import React, { createContext, useContext, type ReactNode } from 'react';
-import { TASKS_VIEW, hasPermission } from '../../application/careTasks';
+import { TASKS_VIEW, hasPermission } from '../../application/permissions';
 import type { ICareTaskService } from '../../domain/services/ICareTaskService';
 import { useCareTasks } from '../hooks/useCareTasks';
 import { useAuth } from './AuthProvider';

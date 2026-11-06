@@ -6,9 +6,8 @@ import { dayKey } from './reminders';
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 export const MAX_TITLE_LENGTH = 200;
 
-/** Permissions the server gives (see GET /me). */
-export const DOCUMENTS_VIEW = 'documents.view';
-export const DOCUMENTS_UPLOAD = 'documents.upload';
+// The permission codes live in permissions.ts. They are still offered from here.
+export { DOCUMENTS_UPLOAD, DOCUMENTS_VIEW } from './permissions';
 
 export type FileKind = 'pdf' | 'image';
 
