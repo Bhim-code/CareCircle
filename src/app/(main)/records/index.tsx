@@ -60,7 +60,7 @@ export default function HealthRecordsScreen() {
         {canSeeDocuments ? 'My health records' : 'Health records'}
       </AppText>
 
-      <AddRecordButtons kinds={addableKinds(policy)} />
+      <AddRecordButtons kinds={addableKinds(user.permissions)} />
 
       {/* Patients have two lists: written records and scanned documents. Caregivers have only the first. */}
       {canSeeEntries && canSeeDocuments ? (
@@ -178,7 +178,7 @@ function EntriesList() {
             key={entry.id}
             entry={entry}
             onEdit={
-              canEditEntry(policy, user, entry)
+              canEditEntry(user.permissions, user.id, entry)
                 ? () => router.push({ pathname: '/records/entry', params: { kind: entry.kind, id: entry.id } })
                 : undefined
             }

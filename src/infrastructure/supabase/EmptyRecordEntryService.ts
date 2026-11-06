@@ -1,25 +1,22 @@
+import type { Person } from '../../domain/entities/Person';
 import type { EntryAuthor, RecordEntry, RecordEntryInput } from '../../domain/entities/RecordEntry';
 import type { IRecordEntryService } from '../../domain/services/IRecordEntryService';
 
-/**
- * Placeholder for the real backend. There is no table for these entries (or
- * storage for photos) yet, so the list is always empty and saving is refused.
- *
- * TODO: replace with a SupabaseRecordEntryService once the backend has:
- *  - a record_entries table with row-level security (a patient sees their own,
- *    a caregiver sees the patient they are linked to);
- *  - a private storage bucket for medication photos, with the same rules.
- */
+/** Used when no backend address is set (and not in demo mode): there are no records to show. */
 export class EmptyRecordEntryService implements IRecordEntryService {
   async list(_viewerId: string): Promise<readonly RecordEntry[]> {
     return [];
   }
 
   async add(_author: EntryAuthor, _input: RecordEntryInput): Promise<RecordEntry> {
-    throw new Error('Saving records is not available yet.');
+    throw new Error('Written records are not available yet.');
   }
 
   async update(_author: EntryAuthor, _entryId: string, _input: RecordEntryInput): Promise<RecordEntry> {
-    throw new Error('Saving records is not available yet.');
+    throw new Error('Written records are not available yet.');
+  }
+
+  async clients(_viewerId: string): Promise<readonly Person[]> {
+    return [];
   }
 }

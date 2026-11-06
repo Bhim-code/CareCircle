@@ -1,3 +1,4 @@
+import type { Person } from '../../domain/entities/Person';
 import type { EntryAuthor, RecordEntry, RecordEntryInput } from '../../domain/entities/RecordEntry';
 import type { IRecordEntryService } from '../../domain/services/IRecordEntryService';
 import { DEMO_CAREGIVER_ID, DEMO_PATIENT_ID } from './demoIds';
@@ -111,6 +112,11 @@ export class DemoRecordEntryService implements IRecordEntryService {
     const key = this.patientFor(author.id);
     this.byPatient.set(key, [...(this.byPatient.get(key) ?? []), entry]);
     return entry;
+  }
+
+  /** The demo has one patient and one caregiver, so there is never a choice to make. */
+  async clients(_viewerId: string): Promise<readonly Person[]> {
+    return [];
   }
 
   async update(author: EntryAuthor, entryId: string, input: RecordEntryInput): Promise<RecordEntry> {
