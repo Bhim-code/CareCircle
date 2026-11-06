@@ -2,11 +2,9 @@ import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { validateSignUp, type FieldErrors, type SignUpValues } from '@/application/validation/authValidators';
-import { isRole, type Role } from '@/domain/entities/Role';
 import { AppText } from '@/presentation/components/AppText';
 import { Banner } from '@/presentation/components/Banner';
 import { Button } from '@/presentation/components/Button';
-import { RoleChoice } from '@/presentation/components/RoleChoice';
 import { Screen } from '@/presentation/components/Screen';
 import { TextField } from '@/presentation/components/TextField';
 import { TextLink } from '@/presentation/components/TextLink';
@@ -19,7 +17,6 @@ export default function SignUpScreen() {
   const { signUp } = useAuth();
   const { loading, error, run } = useSubmit();
 
-  const [role, setRole] = useState<Role | ''>('');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -28,12 +25,13 @@ export default function SignUpScreen() {
   const [confirmEmailFor, setConfirmEmailFor] = useState<string | null>(null);
 
   function handleSubmit() {
-    const errors = validateSignUp({ role, name, email, password, confirmation });
+    // No role is chosen here: a supervisor gives it after the account is created.
+    const errors = validateSignUp({ role: '', name, email, password, confirmation });
     setFieldErrors(errors);
-    if (Object.keys(errors).length > 0 || !isRole(role)) return;
+    if (Object.keys(errors).length > 0) return;
 
     void run(async () => {
-      const result = await signUp({ role, name, email, password });
+      const result = await signUp({ name, email, password });
       if (result.needsEmailConfirmation) setConfirmEmailFor(email.trim());
       // Otherwise the person is already signed in and the app moves on by itself.
     });
@@ -64,7 +62,9 @@ export default function SignUpScreen() {
 
       {error ? <Banner tone="error">{error}</Banner> : null}
 
-      {/* <RoleChoice value={role} onChange={setRole} error={fieldErrors.role} /> */}
+      <Banner tone="info">
+        After you sign up, a supervisor will approve your account. You can use the app as soon as that is done.
+      </Banner>
 
       <TextField
         label="Your name"

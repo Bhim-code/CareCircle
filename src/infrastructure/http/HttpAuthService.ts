@@ -75,7 +75,7 @@ export class HttpAuthService implements IAuthService {
       name: input.name.trim(),
       email: input.email.trim(),
       password: input.password,
-      role: input.role,
+      ...(input.role ? { role: input.role } : {}),
       ...(timezone ? { timezone } : {}),
     });
     const user = await this.start(session);
@@ -155,7 +155,8 @@ export class HttpAuthService implements IAuthService {
 
   /**
    * Builds the person from the backend's answer. The role always comes from the
-   * backend and is never guessed. Staff roles belong on the admin page.
+   * backend and is never guessed. Staff roles belong on the admin page, and "pending"
+   * means a supervisor has not decided yet.
    */
   private toAuthUserOrRefuse(dto: UserDto | undefined): AuthUser | AuthError {
     if (
@@ -167,7 +168,8 @@ export class HttpAuthService implements IAuthService {
       return new AuthError('profile_unavailable');
     }
     if (dto.role === 'admin' || dto.role === 'supervisor') return new AuthError('staff_account');
-    if (!isRole(dto.role)) return new AuthError('profile_unavailable');
+    // Waiting for a supervisor: the person is signed in, but the app shows only the waiting screen.
+    if (dto.role !== 'pending' && !isRole(dto.role)) return new AuthError('profile_unavailable');
     return { id: dto.id, email: dto.email, name: dto.name, role: dto.role };
   }
 

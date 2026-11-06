@@ -17,7 +17,7 @@ import {
   type EntryDraft,
 } from '../src/application/recordEntries';
 import { policyFor } from '../src/application/policies/policyFor';
-import type { AuthUser } from '../src/domain/entities/AuthUser';
+import type { ApprovedUser } from '../src/domain/entities/AuthUser';
 import { ENTRY_KINDS, type EntryAuthor } from '../src/domain/entities/RecordEntry';
 import { DEMO_CAREGIVER_ID, DEMO_PATIENT_ID } from '../src/infrastructure/demo/demoIds';
 import { DemoRecordEntryService } from '../src/infrastructure/demo/DemoRecordEntryService';
@@ -25,11 +25,11 @@ import { EmptyRecordEntryService } from '../src/infrastructure/supabase/EmptyRec
 
 const NOW = new Date(2026, 9, 15, 14, 30); // Oct 15 2026, 2:30 PM local
 
-const patient: AuthUser = { id: DEMO_PATIENT_ID, email: 'patient@demo.test', name: 'Ana Patient', role: 'patient' };
-const caregiver: AuthUser = { id: DEMO_CAREGIVER_ID, email: 'caregiver@demo.test', name: 'Sam Caregiver', role: 'caregiver' };
-const asAuthor = (u: AuthUser): EntryAuthor => ({ id: u.id, name: u.name, role: u.role });
+const patient: ApprovedUser = { id: DEMO_PATIENT_ID, email: 'patient@demo.test', name: 'Ana Patient', role: 'patient' };
+const caregiver: ApprovedUser = { id: DEMO_CAREGIVER_ID, email: 'caregiver@demo.test', name: 'Sam Caregiver', role: 'caregiver' };
+const asAuthor = (u: ApprovedUser): EntryAuthor => ({ id: u.id, name: u.name, role: u.role });
 
-const filled = (user: AuthUser, changes: Partial<EntryDraft>): EntryDraft => ({ ...blankDraft(user, NOW), clientName: 'Ana Patient', ...changes });
+const filled = (user: ApprovedUser, changes: Partial<EntryDraft>): EntryDraft => ({ ...blankDraft(user, NOW), clientName: 'Ana Patient', ...changes });
 
 describe('who can write which kind', () => {
   it('patients write medical, incident and medication records', () => {
@@ -254,7 +254,7 @@ describe('editing rules, lists and editing from draft', () => {
   });
 });
 
-function validated(kind: (typeof ENTRY_KINDS)[number], user: AuthUser) {
+function validated(kind: (typeof ENTRY_KINDS)[number], user: ApprovedUser) {
   const draft = filled(user, {
     title: 'Headache',
     notes: 'Notes here',

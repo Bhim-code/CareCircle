@@ -201,15 +201,25 @@ describe('DemoMedicineService and the demo reminders', () => {
     await assert.rejects(medicines.stop(DEMO_PATIENT_ID, 'nope'));
   });
 
-  it("makes today's demo doses from the medicines, and drops a stopped one", async () => {
+  it("makes the demo doses from the medicines, and drops a stopped one from the days after", async () => {
     const medicines = new DemoMedicineService(0);
     const reminders = new DemoReminderService(0, medicines);
-    const before = await reminders.listForDay(DEMO_PATIENT_ID, dayKey(new Date()));
+    const today = dayKey(new Date());
+    const tomorrow = dayKey(new Date(Date.now() + 24 * 60 * 60 * 1000));
+
+    const before = await reminders.listForDay(DEMO_PATIENT_ID, today);
     assert.equal(before.length, 4);
     assert.ok(before.every((r) => r.id.includes('demo-med-')));
+    assert.equal((await reminders.listForDay(DEMO_PATIENT_ID, tomorrow)).length, 4);
 
     await medicines.stop(DEMO_PATIENT_ID, 'demo-med-2');
-    const after = await reminders.listForDay(DEMO_PATIENT_ID, dayKey(new Date()));
+
+    // Tomorrow never has a dose of a stopped medicine, whatever time it is now.
+    const after = await reminders.listForDay(DEMO_PATIENT_ID, tomorrow);
+    assert.equal(after.length, 3);
     assert.equal(after.some((r) => r.medicineName === 'Metformin'), false);
+    // Today keeps doses whose time has already passed, so the history stays true.
+    const todayAfter = await reminders.listForDay(DEMO_PATIENT_ID, today);
+    assert.ok(todayAfter.length === 3 || todayAfter.length === 4);
   });
 });

@@ -37,7 +37,12 @@ describe('validators', () => {
 
   it('sign-up reports every problem at once', () => {
     const errors = validateSignUp({ role: '', name: '', email: 'x', password: 'short', confirmation: '' });
-    assert.deepEqual(Object.keys(errors).sort(), ['confirmation', 'email', 'name', 'password', 'role']);
+    assert.deepEqual(Object.keys(errors).sort(), ['confirmation', 'email', 'name', 'password']);
+  });
+
+  it('sign-up does not ask for a role, because a supervisor gives it', () => {
+    const errors = validateSignUp({ role: '', name: 'Ana', email: 'a@b.co', password: 'password1', confirmation: 'password1' });
+    assert.deepEqual(errors, {});
   });
 
   it('sign-up rejects an unknown role, so nobody can pick "admin"', () => {

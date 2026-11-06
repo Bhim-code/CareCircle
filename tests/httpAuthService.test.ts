@@ -319,3 +319,49 @@ describe('describeAuthError for the new code', () => {
     assert.match(describeAuthError(new AuthError('staff_account')), /admin page/i);
   });
 });
+
+describe('HttpAuthService accounts waiting for approval', () => {
+  it('signs up without sending a role, and keeps the sign-in of the waiting account', async () => {
+    const { service, tokens, seen, heard } = setup(() => json(201, sessionFor('pending')));
+    const result = await service.signUp({ name: 'Ana', email: 'ana@example.org', password: 'longpassword' });
+    assert.equal(result.user?.role, 'pending');
+    assert.equal('role' in (seen[0].body ?? {}), false);
+    assert.notEqual(await tokens.get(), null);
+    assert.deepEqual(heard, [result.user]);
+  });
+
+  it('still sends a role when the caller gives one, as a hint', async () => {
+    const { service, seen } = setup(() => json(201, sessionFor('pending')));
+    await service.signUp({ name: 'Ana', email: 'ana@example.org', password: 'longpassword', role: 'caregiver' });
+    assert.equal(seen[0].body?.role, 'caregiver');
+  });
+
+  it('signs a waiting person in, with the role "pending", and keeps the tokens', async () => {
+    const { service, tokens } = setup(() => json(200, sessionFor('pending')));
+    const user = await service.signIn('ana@example.org', 'demo1234');
+    assert.deepEqual(user, { id: 'u-1', email: 'ana@example.org', name: 'Ana', role: 'pending' });
+    assert.notEqual(await tokens.get(), null);
+  });
+
+  it('sees that the account was approved when the profile shows a role', async () => {
+    let role = 'pending';
+    const { service } = setup((s) => (s.path === '/auth/sign-in' ? json(200, sessionFor(role)) : json(200, sessionFor(role).user)));
+    await service.signIn('ana@example.org', 'demo1234');
+    assert.equal((await service.getCurrentUser())?.role, 'pending');
+    role = 'patient';
+    assert.equal((await service.getCurrentUser())?.role, 'patient');
+  });
+
+  it('is signed out, and tells listeners, when a supervisor gave a role and the backend ended the sign-in', async () => {
+    let ended = false;
+    const { service, tokens, heard } = setup((s) => {
+      if (s.path === '/auth/sign-in') return json(200, sessionFor('pending'));
+      return ended ? apiError(401, 'unauthenticated', 'Expired.') : json(200, sessionFor('pending').user);
+    });
+    await service.signIn('ana@example.org', 'demo1234');
+    ended = true;
+    assert.equal(await service.getCurrentUser(), null);
+    assert.equal(await tokens.get(), null);
+    assert.equal(heard[heard.length - 1], null);
+  });
+});

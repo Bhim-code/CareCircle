@@ -7,15 +7,17 @@ import React, {
   useState,
   type ReactNode,
 } from 'react';
+import { ACCOUNT_UPDATED_NOTICE, checkApproval, type ApprovalCheck } from '../../application/approval';
 import { policyFor } from '../../application/policies/policyFor';
 import type { DemoAccount } from '../../infrastructure/demo/DemoAuthService';
-import type { AuthUser } from '../../domain/entities/AuthUser';
+import { isApproved, type ApprovedUser, type AuthUser } from '../../domain/entities/AuthUser';
 import type { IRolePolicy } from '../../domain/policies/IRolePolicy';
 import type { Role } from '../../domain/entities/Role';
 import type { IAuthService, SignUpInput, SignUpResult } from '../../domain/services/IAuthService';
 import type { IDevControls } from '../../domain/services/IDevControls';
 
-export type AuthStatus = 'loading' | 'signedOut' | 'signedIn';
+/** "pending": signed in, but a supervisor has not approved the account yet. */
+export type AuthStatus = 'loading' | 'signedOut' | 'pending' | 'signedIn';
 
 /** Development-only helpers. The whole object is null in release builds. */
 export interface DevTools {
@@ -27,7 +29,12 @@ export interface DevTools {
 
 export interface AuthContextValue {
   readonly status: AuthStatus;
-  readonly user: AuthUser | null;
+  /** The signed-in person, once their account has a role. Null while signed out or waiting. */
+  readonly user: ApprovedUser | null;
+  /** The person who signed in but is still waiting for a supervisor. */
+  readonly pendingUser: AuthUser | null;
+  /** A sentence for the sign-in screen when the backend ended a waiting person's sign-in. */
+  readonly signedOutNotice: string | null;
   /** What the signed-in user may do. Null when signed out. */
   readonly policy: IRolePolicy | null;
   readonly isDemo: boolean;
@@ -37,6 +44,8 @@ export interface AuthContextValue {
   signUp(input: SignUpInput): Promise<SignUpResult>;
   signOut(): Promise<void>;
   requestPasswordReset(email: string): Promise<void>;
+  /** Asks the backend again whether a waiting account has been approved. */
+  checkApproval(): Promise<ApprovalCheck>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -58,13 +67,19 @@ export function AuthProvider({
   children,
 }: AuthProviderProps) {
   const [status, setStatus] = useState<AuthStatus>('loading');
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const [account, setAccount] = useState<AuthUser | null>(null);
+  const [signedOutNotice, setSignedOutNotice] = useState<string | null>(null);
   const [, setDevTick] = useState(0);
 
   const apply = useCallback((next: AuthUser | null) => {
-    setUser(next);
-    setStatus(next ? 'signedIn' : 'signedOut');
+    setAccount(next);
+    setStatus(next === null ? 'signedOut' : isApproved(next) ? 'signedIn' : 'pending');
+    // A new sign-in or a new sign-out makes an old notice out of date.
+    if (next !== null) setSignedOutNotice(null);
   }, []);
+
+  const user = account !== null && isApproved(account) ? account : null;
+  const pendingUser = account !== null && !isApproved(account) ? account : null;
 
   useEffect(() => {
     let active = true;
@@ -85,6 +100,8 @@ export function AuthProvider({
     () => ({
       status,
       user,
+      pendingUser,
+      signedOutNotice,
       policy: user ? policyFor(user.role) : null,
       isDemo,
       demoAccounts,
@@ -113,11 +130,23 @@ export function AuthProvider({
       },
       signOut: async () => {
         await service.signOut();
+        setSignedOutNotice(null);
         apply(null);
       },
       requestPasswordReset: (email) => service.requestPasswordReset(email),
+      checkApproval: async () => {
+        const result = await checkApproval(service);
+        if (result.kind === 'signedOut') {
+          // The backend signs a person out when a supervisor gives them a role.
+          setSignedOutNotice(ACCOUNT_UPDATED_NOTICE);
+          apply(null);
+        } else if (result.kind === 'approved') {
+          apply(result.user);
+        }
+        return result;
+      },
     }),
-    [status, user, isDemo, demoAccounts, devControls, service, apply],
+    [status, user, pendingUser, signedOutNotice, isDemo, demoAccounts, devControls, service, apply],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
