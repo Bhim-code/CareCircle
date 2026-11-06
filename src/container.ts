@@ -25,6 +25,7 @@ import { ApiClient } from './infrastructure/http/ApiClient';
 import { HttpAuthService } from './infrastructure/http/HttpAuthService';
 import { HttpCareTaskService } from './infrastructure/http/HttpCareTaskService';
 import { HttpHealthRecordService } from './infrastructure/http/HttpHealthRecordService';
+import { HttpRecordEntryService } from './infrastructure/http/HttpRecordEntryService';
 import { HttpMedicineService } from './infrastructure/http/HttpMedicineService';
 import { HttpReminderService } from './infrastructure/http/HttpReminderService';
 import { SkippedDoseStore } from './infrastructure/http/SkippedDoseStore';
@@ -165,11 +166,13 @@ export function createFilePicker(): IFilePicker {
 
 /**
  * Written records (incidents, medical, behavioural, medication notes) make the
- * same choice: made-up demo entries in development, otherwise the real backend
- * (not built yet, so empty).
+ * same choice: made-up demo entries in development, the CareCircle backend when
+ * its address is set, otherwise nothing.
  */
 export function createRecordEntryService(): IRecordEntryService {
-  return shouldUseDemo() ? new DemoRecordEntryService() : new EmptyRecordEntryService();
+  if (shouldUseDemo()) return new DemoRecordEntryService();
+  if (isApiConfigured) return new HttpRecordEntryService(createApiClient());
+  return new EmptyRecordEntryService();
 }
 
 /**

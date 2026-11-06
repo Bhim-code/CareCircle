@@ -111,8 +111,12 @@ export class DemoAuthService implements IAuthService {
 
 /** The same defaults the real backend gives each role. */
 function demoPermissions(role: AuthUser['role']): readonly string[] {
-  if (role === 'caregiver') return ['tasks.view', 'tasks.complete'];
-  if (role === 'patient') return ['tasks.view', 'documents.view', 'documents.upload'];
+  if (role === 'caregiver') {
+    return ['tasks.view', 'tasks.complete', 'entries.write.behavioural', 'entries.write.incident', 'entries.write.medication'];
+  }
+  if (role === 'patient') {
+    return ['tasks.view', 'documents.view', 'documents.upload', 'entries.write.medical', 'entries.write.incident', 'entries.write.medication'];
+  }
   return [];
 }
 
