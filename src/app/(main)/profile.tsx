@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Linking, StyleSheet, View } from 'react-native';
 import { formatTime } from '@/application/reminders';
@@ -81,14 +82,20 @@ export default function ProfileScreen() {
         <DetailRow label="Account type" value={policy.displayName} />
       </Card>
 
-      {sections.caregiverContacts ? (
-        <Card title="Your caregivers" accent={accent}>
-          <AppText color={colors.inkSoft}>
-            No one has been added yet. Contact details for caregivers you add will appear here, and
-            only you can see them.
-          </AppText>
-        </Card>
-      ) : null}
+      <Card title={sections.caregiverContacts ? 'Your caregivers' : 'People you care for'} accent={accent}>
+        <AppText color={colors.inkSoft}>
+          {sections.caregiverContacts
+            ? 'Invite caregivers by email, see who has accepted, and remove anyone you no longer want to see your records.'
+            : 'See the people who have accepted you as their caregiver, and answer invitations.'}
+        </AppText>
+        <View style={styles.support}>
+          <Button
+            label={sections.caregiverContacts ? 'Manage my caregivers' : 'See my clients and invitations'}
+            variant="secondary"
+            onPress={() => router.push('/care-links')}
+          />
+        </View>
+      </Card>
 
       {hasNotificationChoices ? (
         <Card title="Notifications" accent={accent}>
