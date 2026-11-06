@@ -25,7 +25,8 @@ import {
   sortEntries,
   type EntryFilter,
 } from '@/application/recordEntries';
-import { createHealthRecordService } from '@/container';
+import { hasPermission } from '@/application/careTasks';
+import { DOCUMENTS_UPLOAD, DOCUMENTS_VIEW, fileSummary } from '@/application/documents';
 import type { EntryKind } from '@/domain/entities/RecordEntry';
 import { AppText } from '@/presentation/components/AppText';
 import { Banner } from '@/presentation/components/Banner';
@@ -35,8 +36,8 @@ import { Card } from '@/presentation/components/Card';
 import { EntryCard } from '@/presentation/components/EntryCard';
 import { FilterChips } from '@/presentation/components/FilterChips';
 import { Screen } from '@/presentation/components/Screen';
-import { useHealthRecords } from '@/presentation/hooks/useHealthRecords';
 import { useAuth } from '@/presentation/providers/AuthProvider';
+import { useDocumentList } from '@/presentation/providers/HealthRecordsProvider';
 import { useEntries } from '@/presentation/providers/RecordEntriesProvider';
 import { colors, radius, roleAccent, spacing } from '@/presentation/theme/theme';
 
@@ -50,7 +51,7 @@ export default function HealthRecordsScreen() {
   if (!user || !policy) return null;
 
   const accent = roleAccent[user.role].foreground;
-  const canSeeDocuments = policy.can('records.view');
+  const canSeeDocuments = hasPermission(user.permissions, DOCUMENTS_VIEW);
   const canSeeEntries = policy.can('entries.view');
 
   return (
@@ -78,9 +79,7 @@ export default function HealthRecordsScreen() {
 
       {/* Only roles with the permission ever reach the part that loads documents. */}
       {canSeeDocuments && section === 'documents' ? (
-        <Can permission="records.view" showMessage>
-          <RecordsList userId={user.id} accent={accent} />
-        </Can>
+        <RecordsList accent={accent} canAdd={hasPermission(user.permissions, DOCUMENTS_UPLOAD)} />
       ) : null}
     </Screen>
   );
@@ -190,9 +189,8 @@ function EntriesList() {
   );
 }
 
-function RecordsList({ userId, accent }: { userId: string; accent: string }) {
-  const [service] = useState(createHealthRecordService);
-  const { status, records, retry } = useHealthRecords(service, userId);
+function RecordsList({ accent, canAdd }: { accent: string; canAdd: boolean }) {
+  const { status, records, retry } = useDocumentList();
   const [filter, setFilter] = useState<RecordFilter>('all');
 
   const counts = useMemo(() => countByFilter(records), [records]);
@@ -217,6 +215,8 @@ function RecordsList({ userId, accent }: { userId: string; accent: string }) {
 
   return (
     <>
+      {canAdd ? <Button label="Add a document" onPress={() => router.push('/records/document-add')} /> : null}
+
       {/* With no records at all, a row of "(0)" choices would only be clutter. */}
       {records.length > 0 ? (
         <FilterChips
@@ -237,17 +237,24 @@ function RecordsList({ userId, accent }: { userId: string; accent: string }) {
         </Card>
       ) : (
         shown.map((record) => (
-          <Card key={record.id} title={record.title} accent={accent}>
-            <AppText>{categoryLabel(record.category)}</AppText>
-            <AppText variant="caption" color={colors.inkSoft}>
-              {formatRecordDate(record.recordedOn)}
-            </AppText>
-          </Card>
+          <Pressable
+            key={record.id}
+            accessibilityRole="button"
+            accessibilityLabel={`${record.title}, ${categoryLabel(record.category)}. Opens the document.`}
+            onPress={() => router.push({ pathname: '/records/document', params: { id: record.id } })}
+          >
+            <Card title={record.title} accent={accent}>
+              <AppText>{categoryLabel(record.category)}</AppText>
+              <AppText variant="caption" color={colors.inkSoft}>
+                {formatRecordDate(record.recordedOn)} · {fileSummary(record)}
+              </AppText>
+            </Card>
+          </Pressable>
         ))
       )}
 
       <AppText variant="caption" color={colors.inkSoft} style={styles.note}>
-        Only you can see these records.
+        Only you and the people you have approved can see these.
       </AppText>
     </>
   );

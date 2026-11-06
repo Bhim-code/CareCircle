@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import type { IAlarmScheduler } from './domain/services/IAlarmScheduler';
 import type { IAuthService } from './domain/services/IAuthService';
 import type { ICareTaskService } from './domain/services/ICareTaskService';
+import type { IFilePicker } from './domain/services/IFilePicker';
 import type { IDevControls } from './domain/services/IDevControls';
 import type { IHealthRecordService } from './domain/services/IHealthRecordService';
 import type { IMedicineService } from './domain/services/IMedicineService';
@@ -16,12 +17,14 @@ import { DemoHealthRecordService } from './infrastructure/demo/DemoHealthRecordS
 import { DemoMedicineService } from './infrastructure/demo/DemoMedicineService';
 import { DemoRecordEntryService } from './infrastructure/demo/DemoRecordEntryService';
 import { DemoReminderService } from './infrastructure/demo/DemoReminderService';
+import { ExpoFilePicker } from './infrastructure/device/ExpoFilePicker';
 import { NotifyKitAlarmScheduler } from './infrastructure/notifications/NotifyKitAlarmScheduler';
 import { NoopAlarmScheduler } from './infrastructure/notifications/NoopAlarmScheduler';
 import { AsyncPreferencesStore } from './infrastructure/storage/AsyncPreferencesStore';
 import { ApiClient } from './infrastructure/http/ApiClient';
 import { HttpAuthService } from './infrastructure/http/HttpAuthService';
 import { HttpCareTaskService } from './infrastructure/http/HttpCareTaskService';
+import { HttpHealthRecordService } from './infrastructure/http/HttpHealthRecordService';
 import { HttpMedicineService } from './infrastructure/http/HttpMedicineService';
 import { HttpReminderService } from './infrastructure/http/HttpReminderService';
 import { SkippedDoseStore } from './infrastructure/http/SkippedDoseStore';
@@ -146,11 +149,18 @@ export function createCareTaskService(): ICareTaskService {
 }
 
 /**
- * Health records make the same choice: made-up demo records in development,
- * otherwise the real backend (not built yet, so empty).
+ * Health documents make the same choice: made-up demo documents in development,
+ * the CareCircle backend when its address is set, otherwise nothing.
  */
 export function createHealthRecordService(): IHealthRecordService {
-  return shouldUseDemo() ? new DemoHealthRecordService() : new EmptyHealthRecordService();
+  if (shouldUseDemo()) return new DemoHealthRecordService();
+  if (isApiConfigured) return new HttpHealthRecordService(createApiClient());
+  return new EmptyHealthRecordService();
+}
+
+/** Taking or choosing a photo, and choosing a PDF, on the phone. */
+export function createFilePicker(): IFilePicker {
+  return new ExpoFilePicker();
 }
 
 /**

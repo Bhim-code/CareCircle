@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   createAlarmScheduler,
   createCareTaskService,
+  createHealthRecordService,
   createMedicineService,
   createPreferencesStore,
   createRecordEntryService,
@@ -13,6 +14,7 @@ import {
 } from '@/container';
 import { TASKS_VIEW, hasPermission } from '@/application/careTasks';
 import { AlarmProvider } from '@/presentation/providers/AlarmProvider';
+import { HealthRecordsProvider } from '@/presentation/providers/HealthRecordsProvider';
 import { CareTasksProvider } from '@/presentation/providers/CareTasksProvider';
 import { MedicinesProvider } from '@/presentation/providers/MedicinesProvider';
 import { useAuth } from '@/presentation/providers/AuthProvider';
@@ -42,6 +44,7 @@ export default function MainLayout() {
   const [alarmScheduler] = useState(createAlarmScheduler);
   const [entryService] = useState(createRecordEntryService);
   const [careTaskService] = useState(createCareTaskService);
+  const [healthRecordService] = useState(createHealthRecordService);
   const { user } = useAuth();
   // Only people the backend lets see care tasks get the Tasks tab.
   const canSeeTasks = hasPermission(user?.permissions, TASKS_VIEW);
@@ -54,6 +57,7 @@ export default function MainLayout() {
       <AlarmProvider scheduler={alarmScheduler} reminderService={reminderService}>
       <RecordEntriesProvider service={entryService}>
       <CareTasksProvider service={careTaskService}>
+      <HealthRecordsProvider service={healthRecordService}>
       <Tabs
         screenOptions={{
           headerShown: false,
@@ -82,6 +86,7 @@ export default function MainLayout() {
         <Tabs.Screen name="alarm" options={{ href: null, tabBarStyle: { display: 'none' } }} />
         <Tabs.Screen name="profile" options={tabOptions('Profile', 'person-outline', 'person')} />
       </Tabs>
+      </HealthRecordsProvider>
       </CareTasksProvider>
       </RecordEntriesProvider>
       </AlarmProvider>

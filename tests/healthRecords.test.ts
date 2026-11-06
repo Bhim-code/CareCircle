@@ -129,3 +129,26 @@ describe('EmptyHealthRecordService', () => {
     assert.deepEqual(await new EmptyHealthRecordService().list('anyone'), []);
   });
 });
+
+describe('DemoHealthRecordService documents', () => {
+  const file = { uri: 'file:///scan.pdf', name: 'scan.pdf', mimeType: 'application/pdf', sizeBytes: 1000 };
+
+  it('adds, opens and deletes a document for the demo patient', async () => {
+    const { DemoHealthRecordService } = await import('../src/infrastructure/demo/DemoHealthRecordService');
+    const service = new DemoHealthRecordService(undefined, 0);
+    const before = (await service.list(DEMO_PATIENT_ID)).length;
+    const saved = await service.upload(DEMO_PATIENT_ID, { title: 'Scan', category: 'other', recordedOn: null, file });
+    assert.equal((await service.list(DEMO_PATIENT_ID)).length, before + 1);
+    assert.equal(saved.fileType, 'pdf');
+    assert.equal(await service.freshLink(DEMO_PATIENT_ID, saved.id), file.uri);
+    await service.remove(DEMO_PATIENT_ID, saved.id);
+    assert.equal((await service.list(DEMO_PATIENT_ID)).length, before);
+  });
+
+  it('keeps a caregiver out and refuses other files', async () => {
+    const { DemoHealthRecordService } = await import('../src/infrastructure/demo/DemoHealthRecordService');
+    const service = new DemoHealthRecordService(undefined, 0);
+    await assert.rejects(service.upload('demo-caregiver@demo.test', { title: 'x', category: 'other', recordedOn: null, file }));
+    await assert.rejects(service.upload(DEMO_PATIENT_ID, { title: 'x', category: 'other', recordedOn: null, file: { ...file, name: 'a.doc', mimeType: 'application/msword' } }));
+  });
+});
