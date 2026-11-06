@@ -19,6 +19,7 @@ interface UserDto {
   email?: unknown;
   name?: unknown;
   role?: unknown;
+  permissions?: unknown;
 }
 
 /** What sign-in and sign-up answer with (SessionOut). */
@@ -26,6 +27,11 @@ interface SessionDto {
   accessToken?: unknown;
   refreshToken?: unknown;
   user?: UserDto;
+}
+
+/** The list of permission names from /me, or undefined if it is missing or not a list of text. */
+function readPermissions(value: unknown): readonly string[] | undefined {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string') ? (value as string[]) : undefined;
 }
 
 /** The phone's own time zone, such as America/St_Johns. Undefined if the phone will not say. */
@@ -132,8 +138,10 @@ export class HttpAuthService implements IAuthService {
       throw user;
     }
     await this.api.saveTokens({ accessToken: session.accessToken, refreshToken: session.refreshToken });
-    this.announce(user);
-    return user;
+    // Sign-in does not say what the person may do, but /me does.
+    const complete = await this.withPermissions(user);
+    this.announce(complete);
+    return complete;
   }
 
   /** The server made a session for an account the app cannot use. End it there as well. */
@@ -145,6 +153,17 @@ export class HttpAuthService implements IAuthService {
       // Best effort. The tokens are forgotten below either way.
     }
     await this.api.forgetTokens();
+  }
+
+  /** Asks /me what the person may do. If that fails the person simply has no extra permissions yet. */
+  private async withPermissions(user: AuthUser): Promise<AuthUser> {
+    if (user.permissions) return user;
+    try {
+      const permissions = readPermissions((await this.api.get<UserDto>('/me')).permissions);
+      return permissions ? { ...user, permissions } : user;
+    } catch {
+      return user;
+    }
   }
 
   private toAuthUser(dto: UserDto): AuthUser {
@@ -170,7 +189,8 @@ export class HttpAuthService implements IAuthService {
     if (dto.role === 'admin' || dto.role === 'supervisor') return new AuthError('staff_account');
     // Waiting for a supervisor: the person is signed in, but the app shows only the waiting screen.
     if (dto.role !== 'pending' && !isRole(dto.role)) return new AuthError('profile_unavailable');
-    return { id: dto.id, email: dto.email, name: dto.name, role: dto.role };
+    const permissions = readPermissions(dto.permissions);
+    return { id: dto.id, email: dto.email, name: dto.name, role: dto.role, ...(permissions ? { permissions } : {}) };
   }
 
   private announce(user: AuthUser | null): void {

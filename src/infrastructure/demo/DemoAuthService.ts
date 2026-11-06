@@ -60,6 +60,7 @@ export class DemoAuthService implements IAuthService {
       name: input.name.trim(),
       // Like the real backend: a new account waits for a supervisor, whatever role it asked for.
       role: 'pending',
+      permissions: [],
     };
     this.accounts.set(email, { user, password: input.password });
     this.setCurrent(user);
@@ -92,7 +93,7 @@ export class DemoAuthService implements IAuthService {
   }
 
   private seed(name: string, email: string, role: AuthUser['role']): void {
-    const user: AuthUser = { id: `demo-${email}`, email, name, role };
+    const user: AuthUser = { id: `demo-${email}`, email, name, role, permissions: demoPermissions(role) };
     this.accounts.set(email, { user, password: DEMO_PASSWORD });
   }
 
@@ -106,6 +107,13 @@ export class DemoAuthService implements IAuthService {
       ? new Promise((resolve) => setTimeout(resolve, this.latencyMs))
       : Promise.resolve();
   }
+}
+
+/** The same defaults the real backend gives each role. */
+function demoPermissions(role: AuthUser['role']): readonly string[] {
+  if (role === 'caregiver') return ['tasks.view', 'tasks.complete'];
+  if (role === 'patient') return ['tasks.view'];
+  return [];
 }
 
 function normalise(email: string): string {

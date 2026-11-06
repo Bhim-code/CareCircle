@@ -2,6 +2,7 @@ import { env, isApiConfigured, isSupabaseConfigured } from './config/env';
 import { Platform } from 'react-native';
 import type { IAlarmScheduler } from './domain/services/IAlarmScheduler';
 import type { IAuthService } from './domain/services/IAuthService';
+import type { ICareTaskService } from './domain/services/ICareTaskService';
 import type { IDevControls } from './domain/services/IDevControls';
 import type { IHealthRecordService } from './domain/services/IHealthRecordService';
 import type { IMedicineService } from './domain/services/IMedicineService';
@@ -10,6 +11,7 @@ import type { IRecordEntryService } from './domain/services/IRecordEntryService'
 import type { IReminderService } from './domain/services/IReminderService';
 import { DevModeAuthService } from './infrastructure/dev/DevModeAuthService';
 import { DEMO_ACCOUNTS, DemoAuthService, type DemoAccount } from './infrastructure/demo/DemoAuthService';
+import { DemoCareTaskService } from './infrastructure/demo/DemoCareTaskService';
 import { DemoHealthRecordService } from './infrastructure/demo/DemoHealthRecordService';
 import { DemoMedicineService } from './infrastructure/demo/DemoMedicineService';
 import { DemoRecordEntryService } from './infrastructure/demo/DemoRecordEntryService';
@@ -19,11 +21,13 @@ import { NoopAlarmScheduler } from './infrastructure/notifications/NoopAlarmSche
 import { AsyncPreferencesStore } from './infrastructure/storage/AsyncPreferencesStore';
 import { ApiClient } from './infrastructure/http/ApiClient';
 import { HttpAuthService } from './infrastructure/http/HttpAuthService';
+import { HttpCareTaskService } from './infrastructure/http/HttpCareTaskService';
 import { HttpMedicineService } from './infrastructure/http/HttpMedicineService';
 import { HttpReminderService } from './infrastructure/http/HttpReminderService';
 import { SkippedDoseStore } from './infrastructure/http/SkippedDoseStore';
 import { TokenStore } from './infrastructure/http/TokenStore';
 import { AsyncSessionStorage } from './infrastructure/storage/AsyncSessionStorage';
+import { EmptyCareTaskService } from './infrastructure/supabase/EmptyCareTaskService';
 import { EmptyMedicineService } from './infrastructure/supabase/EmptyMedicineService';
 import { EmptyRecordEntryService } from './infrastructure/supabase/EmptyRecordEntryService';
 import { EmptyReminderService } from './infrastructure/supabase/EmptyReminderService';
@@ -129,6 +133,16 @@ export function createMedicineService(): IMedicineService {
   if (shouldUseDemo()) return sharedDemoMedicines();
   if (isApiConfigured) return new HttpMedicineService(createApiClient());
   return new EmptyMedicineService();
+}
+
+/**
+ * Daily care tasks make the same choice: made-up demo tasks in development, the
+ * CareCircle backend when its address is set, otherwise nothing.
+ */
+export function createCareTaskService(): ICareTaskService {
+  if (shouldUseDemo()) return new DemoCareTaskService();
+  if (isApiConfigured) return new HttpCareTaskService(createApiClient());
+  return new EmptyCareTaskService();
 }
 
 /**
