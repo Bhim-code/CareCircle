@@ -1,10 +1,9 @@
+import type { Person } from './Person';
+
+export type { Person };
+
 /** Where one task stands for one day. The server works this out. */
 export type TaskStatus = 'upcoming' | 'due' | 'done' | 'late' | 'skipped' | 'missed';
-
-export interface Person {
-  readonly id: string;
-  readonly name: string;
-}
 
 /** Someone marked a task done, or skipped it. */
 export interface TaskMark {
