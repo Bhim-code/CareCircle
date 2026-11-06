@@ -5,7 +5,8 @@ export interface SignUpInput {
   readonly name: string;
   readonly email: string;
   readonly password: string;
-  readonly role: Role;
+  /** Only a hint. The backend gives every new account the role "pending" until a supervisor decides. */
+  readonly role?: Role;
 }
 
 export interface SignUpResult {

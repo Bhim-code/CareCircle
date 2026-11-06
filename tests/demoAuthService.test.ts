@@ -30,12 +30,20 @@ describe('DemoAuthService (as IAuthService)', () => {
     await rejectsWith(service.signIn('nobody@demo.test', DEMO_PASSWORD), 'invalid_credentials');
   });
 
-  it('signs a new person up, signs them in, and keeps their chosen role', async () => {
+  it('signs a new person up and in, as "pending" until a supervisor decides', async () => {
     const service = make();
+    // Even if a role is asked for, it is only a hint, like on the real backend.
     const result = await service.signUp({ name: 'Lee', email: 'lee@x.co', password: 'password1', role: 'caregiver' });
     assert.equal(result.needsEmailConfirmation, false);
-    assert.equal(result.user?.role, 'caregiver');
+    assert.equal(result.user?.role, 'pending');
     assert.equal((await service.getCurrentUser())?.email, 'lee@x.co');
+    const noRole = await service.signUp({ name: 'Kim', email: 'kim@x.co', password: 'password1' });
+    assert.equal(noRole.user?.role, 'pending');
+  });
+
+  it('has a demo account that is waiting for approval', async () => {
+    const user = await make().signIn('pending@demo.test', DEMO_PASSWORD);
+    assert.equal(user.role, 'pending');
   });
 
   it('refuses a second sign-up with the same email', async () => {

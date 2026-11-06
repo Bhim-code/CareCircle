@@ -68,7 +68,8 @@ export interface SignUpValues {
 
 export function validateSignUp(values: SignUpValues): FieldErrors<keyof SignUpValues> {
   return collect<keyof SignUpValues>([
-    ['role', isRole(values.role) ? undefined : 'Choose how you will use CareCircle.'],
+    // The role is optional: a supervisor gives it. If one is sent it must be a real one.
+    ['role', values.role === '' || isRole(values.role) ? undefined : 'Choose how you will use CareCircle.'],
     ['name', validateName(values.name)],
     ['email', validateEmail(values.email)],
     ['password', validatePassword(values.password)],

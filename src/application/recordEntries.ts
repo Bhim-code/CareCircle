@@ -8,7 +8,7 @@ import {
   type RecordEntry,
   type RecordEntryInput,
 } from '../domain/entities/RecordEntry';
-import type { AuthUser } from '../domain/entities/AuthUser';
+import type { ApprovedUser } from '../domain/entities/AuthUser';
 import type { IRolePolicy, Permission } from '../domain/policies/IRolePolicy';
 import { dayKey } from './reminders';
 
@@ -59,7 +59,7 @@ export function addableKinds(policy: IRolePolicy): EntryKind[] {
 }
 
 /** Only the person who wrote an entry can edit it, and only for a kind their role may write. */
-export function canEditEntry(policy: IRolePolicy, user: AuthUser, entry: RecordEntry): boolean {
+export function canEditEntry(policy: IRolePolicy, user: ApprovedUser, entry: RecordEntry): boolean {
   return entry.recordedBy.id === user.id && policy.can(PERMISSION_FOR_KIND[entry.kind]);
 }
 
@@ -134,7 +134,7 @@ export type DraftField = keyof EntryDraft;
 export type DraftErrors = Partial<Record<DraftField, string>>;
 
 /** A fresh form. A patient is the client, so their name is filled in. Date and time default to now. */
-export function blankDraft(user: AuthUser, now: Date): EntryDraft {
+export function blankDraft(user: ApprovedUser, now: Date): EntryDraft {
   return {
     clientName: user.role === 'patient' ? user.name : '',
     title: '',

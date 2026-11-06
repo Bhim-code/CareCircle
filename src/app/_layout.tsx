@@ -36,6 +36,8 @@ function RootNavigator() {
   if (status === 'loading') return <LoadingScreen />;
 
   const signedIn = status === 'signedIn';
+  // Signed in, but a supervisor has not approved the account yet.
+  const pending = status === 'pending';
 
   return (
     <Stack
@@ -44,7 +46,10 @@ function RootNavigator() {
       <Stack.Protected guard={signedIn}>
         <Stack.Screen name="(main)" />
       </Stack.Protected>
-      <Stack.Protected guard={!signedIn}>
+      <Stack.Protected guard={pending}>
+        <Stack.Screen name="(pending)" />
+      </Stack.Protected>
+      <Stack.Protected guard={!signedIn && !pending}>
         <Stack.Screen name="(auth)" />
       </Stack.Protected>
     </Stack>
