@@ -4,8 +4,8 @@ import type { IAuthService, SignUpInput, SignUpResult, Unsubscribe } from '../..
 import type { IDevControls } from '../../domain/services/IDevControls';
 
 const DEV_USERS: Record<Role, AuthUser> = {
-  patient: { id: 'dev-patient', email: 'patient@dev.local', name: 'Ana Patient (Dev)', role: 'patient' },
-  caregiver: { id: 'dev-caregiver', email: 'caregiver@dev.local', name: 'Sam Caregiver (Dev)', role: 'caregiver' },
+  patient: { id: 'dev-patient', email: 'patient@dev.local', name: 'Ana Patient (Dev)', role: 'patient', permissions: ['tasks.view', 'documents.view', 'documents.upload', 'entries.write.medical', 'entries.write.incident', 'entries.write.medication'] },
+  caregiver: { id: 'dev-caregiver', email: 'caregiver@dev.local', name: 'Sam Caregiver (Dev)', role: 'caregiver', permissions: ['tasks.view', 'tasks.complete', 'entries.write.behavioural', 'entries.write.incident', 'entries.write.medication'] },
 };
 
 type Listener = (user: AuthUser | null) => void;

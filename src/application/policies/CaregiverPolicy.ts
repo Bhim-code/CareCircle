@@ -8,8 +8,5 @@ export class CaregiverPolicy extends RolePolicy {
     'alerts.receive',
     'patients.monitor',
     'entries.view',
-    'entries.behavioural',
-    'entries.incident',
-    'entries.medication',
   ]);
 }

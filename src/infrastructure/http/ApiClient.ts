@@ -115,6 +115,15 @@ export class ApiClient {
     };
   }
 
+  /**
+   * The full address for a link the server sent. The backend sends file links without the
+   * server's name (such as /files/documents/...), so the app adds it. A full link is kept.
+   */
+  absoluteUrl(link: string): string {
+    if (/^[a-z][a-z0-9+.-]*:/i.test(link)) return link;
+    return `${this.baseUrl}${link.startsWith('/') ? '' : '/'}${link}`;
+  }
+
   /** True when there are saved tokens, meaning someone signed in earlier. */
   async hasSession(): Promise<boolean> {
     return (await this.tokens.get()) !== null;

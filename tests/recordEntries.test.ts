@@ -27,26 +27,27 @@ const NOW = new Date(2026, 9, 15, 14, 30); // Oct 15 2026, 2:30 PM local
 
 const patient: ApprovedUser = { id: DEMO_PATIENT_ID, email: 'patient@demo.test', name: 'Ana Patient', role: 'patient' };
 const caregiver: ApprovedUser = { id: DEMO_CAREGIVER_ID, email: 'caregiver@demo.test', name: 'Sam Caregiver', role: 'caregiver' };
+const DEMO_PATIENT_PERMISSIONS = ['entries.write.medical', 'entries.write.incident', 'entries.write.medication'];
+const DEMO_CAREGIVER_PERMISSIONS = ['entries.write.behavioural', 'entries.write.incident', 'entries.write.medication'];
 const asAuthor = (u: ApprovedUser): EntryAuthor => ({ id: u.id, name: u.name, role: u.role });
 
 const filled = (user: ApprovedUser, changes: Partial<EntryDraft>): EntryDraft => ({ ...blankDraft(user, NOW), clientName: 'Ana Patient', ...changes });
 
 describe('who can write which kind', () => {
   it('patients write medical, incident and medication records', () => {
-    assert.deepEqual(addableKinds(policyFor('patient')), ['medical', 'incident', 'medication']);
+    assert.deepEqual(addableKinds(DEMO_PATIENT_PERMISSIONS), ['medical', 'incident', 'medication']);
   });
   it('caregivers write behavioural, incident and medication records', () => {
-    assert.deepEqual(addableKinds(policyFor('caregiver')), ['behavioural', 'incident', 'medication']);
+    assert.deepEqual(addableKinds(DEMO_CAREGIVER_PERMISSIONS), ['behavioural', 'incident', 'medication']);
   });
-  it('both roles can file an incident and see the written records', () => {
-    for (const role of ['patient', 'caregiver'] as const) {
-      assert.equal(policyFor(role).can('entries.incident'), true);
-      assert.equal(policyFor(role).can('entries.view'), true);
-    }
+  it('both roles can file an incident, and both see the written records', () => {
+    assert.ok(addableKinds(DEMO_PATIENT_PERMISSIONS).includes('incident'));
+    assert.ok(addableKinds(DEMO_CAREGIVER_PERMISSIONS).includes('incident'));
+    for (const role of ['patient', 'caregiver'] as const) assert.equal(policyFor(role).can('entries.view'), true);
   });
   it('a patient cannot write behavioural records and a caregiver cannot write medical ones', () => {
-    assert.equal(policyFor('patient').can('entries.behavioural'), false);
-    assert.equal(policyFor('caregiver').can('entries.medical'), false);
+    assert.ok(!addableKinds(DEMO_PATIENT_PERMISSIONS).includes('behavioural'));
+    assert.ok(!addableKinds(DEMO_CAREGIVER_PERMISSIONS).includes('medical'));
   });
 });
 
@@ -229,10 +230,10 @@ describe('editing rules, lists and editing from draft', () => {
     const entries = await service.list(DEMO_PATIENT_ID);
     const ownMedical = entries.find((e) => e.kind === 'medical')!; // written by the patient
     const careIncident = entries.find((e) => e.kind === 'incident')!; // written by the caregiver
-    assert.equal(canEditEntry(policyFor('patient'), patient, ownMedical), true);
-    assert.equal(canEditEntry(policyFor('caregiver'), caregiver, ownMedical), false);
-    assert.equal(canEditEntry(policyFor('caregiver'), caregiver, careIncident), true);
-    assert.equal(canEditEntry(policyFor('patient'), patient, careIncident), false);
+    assert.equal(canEditEntry(DEMO_PATIENT_PERMISSIONS, patient.id, ownMedical), true);
+    assert.equal(canEditEntry(DEMO_CAREGIVER_PERMISSIONS, caregiver.id, ownMedical), false);
+    assert.equal(canEditEntry(DEMO_CAREGIVER_PERMISSIONS, caregiver.id, careIncident), true);
+    assert.equal(canEditEntry(DEMO_PATIENT_PERMISSIONS, patient.id, careIncident), false);
   });
   it('sorts newest first, filters by kind and counts', async () => {
     const entries = await new DemoRecordEntryService(0, () => NOW).list(DEMO_PATIENT_ID);

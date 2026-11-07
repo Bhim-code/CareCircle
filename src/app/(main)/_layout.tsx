@@ -5,12 +5,18 @@ import type { ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   createAlarmScheduler,
+  createCareTaskService,
+  createHealthRecordService,
   createMedicineService,
   createPreferencesStore,
   createRecordEntryService,
   createReminderService,
 } from '@/container';
+import { TASKS_VIEW } from '@/application/permissions';
+import { usePermission } from '@/presentation/hooks/usePermission';
 import { AlarmProvider } from '@/presentation/providers/AlarmProvider';
+import { HealthRecordsProvider } from '@/presentation/providers/HealthRecordsProvider';
+import { CareTasksProvider } from '@/presentation/providers/CareTasksProvider';
 import { MedicinesProvider } from '@/presentation/providers/MedicinesProvider';
 import { PreferencesProvider } from '@/presentation/providers/PreferencesProvider';
 import { RecordEntriesProvider } from '@/presentation/providers/RecordEntriesProvider';
@@ -37,6 +43,10 @@ export default function MainLayout() {
   const [medicineService] = useState(createMedicineService);
   const [alarmScheduler] = useState(createAlarmScheduler);
   const [entryService] = useState(createRecordEntryService);
+  const [careTaskService] = useState(createCareTaskService);
+  const [healthRecordService] = useState(createHealthRecordService);
+  // Only people the backend lets see care tasks get the Tasks tab.
+  const canSeeTasks = usePermission(TASKS_VIEW);
   const insets = useSafeAreaInsets();
 
   return (
@@ -45,6 +55,8 @@ export default function MainLayout() {
       <RemindersProvider service={reminderService}>
       <AlarmProvider scheduler={alarmScheduler} reminderService={reminderService}>
       <RecordEntriesProvider service={entryService}>
+      <CareTasksProvider service={careTaskService}>
+      <HealthRecordsProvider service={healthRecordService}>
       <Tabs
         screenOptions={{
           headerShown: false,
@@ -64,11 +76,19 @@ export default function MainLayout() {
       >
         <Tabs.Screen name="index" options={tabOptions('Home', 'home-outline', 'home')} />
         <Tabs.Screen name="medications" options={tabOptions('Medications', 'medkit-outline', 'medkit')} />
+        <Tabs.Screen
+          name="tasks"
+          options={canSeeTasks ? tabOptions('Tasks', 'checkbox-outline', 'checkbox', 'Today\'s tasks') : { href: null }}
+        />
         <Tabs.Screen name="records" options={tabOptions('Records', 'document-text-outline', 'document-text', 'Health Records')} />
+        {/* Care links open from the Profile screen, not from the tab bar. */}
+        <Tabs.Screen name="care-links" options={{ href: null }} />
         {/* The alarm screen is opened by an alarm, not from the tab bar. */}
         <Tabs.Screen name="alarm" options={{ href: null, tabBarStyle: { display: 'none' } }} />
         <Tabs.Screen name="profile" options={tabOptions('Profile', 'person-outline', 'person')} />
       </Tabs>
+      </HealthRecordsProvider>
+      </CareTasksProvider>
       </RecordEntriesProvider>
       </AlarmProvider>
       </RemindersProvider>
