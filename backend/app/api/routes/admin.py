@@ -318,8 +318,9 @@ def _reminder_rows(db: Session, patient_id: uuid.UUID, start: date | None, end: 
     if hi:
         query = query.where(Reminder.scheduled_at < hi)
     return [AdminReminderOut(id=r.id, medicine_name=name, scheduled_at=r.scheduled_at,
-                             acknowledged_at=r.acknowledged_at,
-                             status=stats.reminder_status(r.scheduled_at, r.acknowledged_at))
+                             acknowledged_at=r.acknowledged_at, skipped_at=r.skipped_at,
+                             status=stats.reminder_status(r.scheduled_at, r.acknowledged_at,
+                                                          skipped_at=r.skipped_at))
             for r, name in db.execute(query.limit(2000))]
 
 
@@ -430,8 +431,10 @@ def export_reminders(patient_id: uuid.UUID,
     _patient(db, patient_id, me, "reminders.export")
     rows = _reminder_rows(db, patient_id, from_date, to_date)
     data = [[r.scheduled_at.isoformat(), r.medicine_name, r.status,
-             r.acknowledged_at.isoformat() if r.acknowledged_at else ""] for r in rows]
-    return _csv(f"reminders-{patient_id}.csv", ["scheduledAt", "medicine", "status", "confirmedAt"], data)
+             r.acknowledged_at.isoformat() if r.acknowledged_at else "",
+             r.skipped_at.isoformat() if r.skipped_at else ""] for r in rows]
+    return _csv(f"reminders-{patient_id}.csv",
+                ["scheduledAt", "medicine", "status", "confirmedAt", "skippedAt"], data)
 
 
 # --- access log --------------------------------------------------------------

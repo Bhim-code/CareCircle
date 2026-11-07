@@ -118,8 +118,8 @@ const ACTION_LABEL = {
   'tasks.list': 'Viewed care tasks in the app', 'tasks.plan': 'Added a care task from the app', 'tasks.complete': 'Marked a care task', 'tasks.extra': 'Logged extra work',
   'admin.change.denied': 'Tried to change an account',
 };
-const STATUS_CLASS = { taken: 'text-taken', due: 'text-due', missed: 'text-missed', upcoming: 'text-upcoming' };
-const STATUS_LABEL = { taken: 'Taken', due: 'Due now', missed: 'Missed', upcoming: 'Upcoming' };
+const STATUS_CLASS = { taken: 'text-taken', due: 'text-due', missed: 'text-missed', upcoming: 'text-upcoming', skipped: 'text-muted' };
+const STATUS_LABEL = { taken: 'Taken', due: 'Due now', missed: 'Missed', upcoming: 'Upcoming', skipped: 'Skipped' };
 
 function toast(message) {
   const el = document.getElementById('toast');
@@ -365,11 +365,11 @@ function signInPage(notice) {
 async function overviewPage(root) {
   const data = await api(`/admin/overview${query({ timezone: TZ })}`);
   const t = data.remindersToday;
-  const parts = [['taken', t.taken], ['due', t.due], ['missed', t.missed], ['upcoming', t.upcoming]];
+  const parts = [['taken', t.taken], ['skipped', t.skipped || 0], ['due', t.due], ['missed', t.missed], ['upcoming', t.upcoming]];
   const bar = h('div', { class: 'flex h-3 w-full overflow-hidden rounded-full bg-rule', role: 'img',
     'aria-label': parts.map(([k, n]) => `${n} ${STATUS_LABEL[k].toLowerCase()}`).join(', ') },
   t.total ? parts.filter(([, n]) => n).map(([k, n]) => h('span', {
-    class: { taken: 'bg-taken', due: 'bg-due', missed: 'bg-missed', upcoming: 'bg-upcoming/40' }[k],
+    class: { taken: 'bg-taken', skipped: 'bg-muted/50', due: 'bg-due', missed: 'bg-missed', upcoming: 'bg-upcoming/40' }[k],
     style: `width:${(n / t.total) * 100}%`,
   })) : null);
 

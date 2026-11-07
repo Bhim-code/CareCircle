@@ -1,7 +1,7 @@
 import re
 import uuid
 from datetime import date
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import Field, StringConstraints, field_validator, model_validator
 
@@ -46,9 +46,14 @@ class MedicineOut(CamelModel):
 
 
 class ReminderOut(CamelModel):
-    """Exactly the contract shape. The app works out upcoming / due / missed itself."""
+    """The contract shape plus additions: patientId and patientName (who the dose is for,
+    useful for caregivers), skipped, and status worked out by the server."""
 
     id: uuid.UUID
     medicine_name: str
     scheduled_at: UtcDateTime
     acknowledged: bool
+    skipped: bool
+    status: Literal["upcoming", "due", "taken", "skipped", "missed"]
+    patient_id: uuid.UUID
+    patient_name: str
