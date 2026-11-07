@@ -19,6 +19,17 @@ export interface UserPreferences {
   readonly missedDoseCall: boolean;
 }
 
+/**
+ * The settings the server keeps for the person, so they follow the person to a new phone.
+ * The rest (alarm sound, vibration, snooze length) belong to one phone's alarm and stay on it.
+ */
+export type SyncedPreferences = Pick<
+  UserPreferences,
+  'largerText' | 'reminderNotifications' | 'missedDoseEmail' | 'missedDoseCall'
+>;
+
+export const SYNCED_FIELDS = ['largerText', 'reminderNotifications', 'missedDoseEmail', 'missedDoseCall'] as const;
+
 /** The snooze lengths a person can pick from. */
 export const SNOOZE_CHOICES = [5, 10, 15] as const;
 

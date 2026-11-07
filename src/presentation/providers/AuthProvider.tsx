@@ -49,6 +49,8 @@ export interface AuthContextValue {
   requestPasswordReset(email: string): Promise<void>;
   /** Asks the backend again whether a waiting account has been approved. */
   checkApproval(): Promise<ApprovalCheck>;
+  /** Shows a name the person just saved, without signing in again. */
+  applyName(name: string): void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -59,6 +61,8 @@ interface AuthProviderProps {
   isDemo?: boolean;
   demoAccounts?: readonly DemoAccount[];
   devControls?: IDevControls | null;
+  /** Runs just before signing out, while the sign-in still works (for example to stop notifications). Must not throw. */
+  beforeSignOut?: (userId: string) => Promise<void>;
   children: ReactNode;
 }
 
@@ -67,6 +71,7 @@ export function AuthProvider({
   isDemo = false,
   demoAccounts = [],
   devControls = null,
+  beforeSignOut,
   children,
 }: AuthProviderProps) {
   const [status, setStatus] = useState<AuthStatus>('loading');
@@ -168,11 +173,14 @@ export function AuthProvider({
         return result;
       },
       signOut: async () => {
+        const who = accountRef.current;
+        if (who && beforeSignOut) await beforeSignOut(who.id).catch(() => undefined);
         await service.signOut();
         setSignedOutNotice(null);
         apply(null);
       },
       requestPasswordReset: (email) => service.requestPasswordReset(email),
+      applyName: (name) => setAccount((current) => (current === null ? current : { ...current, name })),
       checkApproval: async () => {
         const result = await checkApproval(service);
         if (result.kind === 'signedOut') {
@@ -185,7 +193,7 @@ export function AuthProvider({
         return result;
       },
     }),
-    [status, user, pendingUser, signedOutNotice, isDemo, demoAccounts, devControls, service, apply],
+    [status, user, pendingUser, signedOutNotice, isDemo, demoAccounts, devControls, service, apply, beforeSignOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
