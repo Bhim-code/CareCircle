@@ -50,9 +50,17 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "CareCircle uses the camera only to photograph a medicine, such as its bottle or label.",
+          "cameraPermission": "CareCircle uses the camera only to photograph a medicine or a health document.",
           "microphonePermission": false,
           "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "CareCircle reads a photo only when you choose one to add as a health document.",
+          "cameraPermission": "CareCircle uses the camera only to photograph a medicine or a health document.",
+          "microphonePermission": false
         }
       ],
       "./plugins/withShowWhenLocked",

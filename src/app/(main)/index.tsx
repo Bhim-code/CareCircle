@@ -153,8 +153,8 @@ export default function HomeScreen() {
         <Can permission="caregivers.manage">
           <Update
             icon="people-outline"
-            title="No caregivers yet"
-            text="Caregivers you invite will be alerted if you miss a reminder."
+            title="Your caregivers"
+            text="Invite a caregiver, or see who has accepted, in Profile > Manage my caregivers."
           />
         </Can>
         <Can permission="alerts.receive">
@@ -167,8 +167,8 @@ export default function HomeScreen() {
         <Can permission="patients.monitor">
           <Update
             icon="person-add-outline"
-            title="No one is linked to you yet"
-            text="Ask them to add you as their caregiver."
+            title="Your clients"
+            text="Accept invitations and see who you care for in Profile > See my clients and invitations."
           />
         </Can>
 

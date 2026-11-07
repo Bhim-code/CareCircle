@@ -9,7 +9,7 @@ import {
   formatRecordDate,
   sortRecords,
 } from '../src/application/healthRecords';
-import { policyFor } from '../src/application/policies/policyFor';
+import { DOCUMENTS_VIEW, hasPermission } from '../src/application/permissions';
 import { HEALTH_RECORD_CATEGORIES, type HealthRecord } from '../src/domain/entities/HealthRecord';
 import { DemoAuthService } from '../src/infrastructure/demo/DemoAuthService';
 import { DEMO_PATIENT_ID } from '../src/infrastructure/demo/demoIds';
@@ -95,10 +95,11 @@ describe('emptyMessageFor', () => {
   });
 });
 
-describe('records permission', () => {
-  it('lets patients see their own records, but not caregivers', () => {
-    assert.ok(policyFor('patient').can('records.view'));
-    assert.equal(policyFor('caregiver').can('records.view'), false);
+describe('documents permission', () => {
+  it('shows documents only to a person the server gave documents.view', () => {
+    assert.ok(hasPermission(['documents.view', 'tasks.view'], DOCUMENTS_VIEW));
+    assert.equal(hasPermission(['tasks.view'], DOCUMENTS_VIEW), false);
+    assert.equal(hasPermission(undefined, DOCUMENTS_VIEW), false);
   });
 });
 
@@ -127,5 +128,28 @@ describe('DemoHealthRecordService', () => {
 describe('EmptyHealthRecordService', () => {
   it('always returns an empty list until a real backend exists', async () => {
     assert.deepEqual(await new EmptyHealthRecordService().list('anyone'), []);
+  });
+});
+
+describe('DemoHealthRecordService documents', () => {
+  const file = { uri: 'file:///scan.pdf', name: 'scan.pdf', mimeType: 'application/pdf', sizeBytes: 1000 };
+
+  it('adds, opens and deletes a document for the demo patient', async () => {
+    const { DemoHealthRecordService } = await import('../src/infrastructure/demo/DemoHealthRecordService');
+    const service = new DemoHealthRecordService(undefined, 0);
+    const before = (await service.list(DEMO_PATIENT_ID)).length;
+    const saved = await service.upload(DEMO_PATIENT_ID, { title: 'Scan', category: 'other', recordedOn: null, file });
+    assert.equal((await service.list(DEMO_PATIENT_ID)).length, before + 1);
+    assert.equal(saved.fileType, 'pdf');
+    assert.equal(await service.freshLink(DEMO_PATIENT_ID, saved.id), file.uri);
+    await service.remove(DEMO_PATIENT_ID, saved.id);
+    assert.equal((await service.list(DEMO_PATIENT_ID)).length, before);
+  });
+
+  it('keeps a caregiver out and refuses other files', async () => {
+    const { DemoHealthRecordService } = await import('../src/infrastructure/demo/DemoHealthRecordService');
+    const service = new DemoHealthRecordService(undefined, 0);
+    await assert.rejects(service.upload('demo-caregiver@demo.test', { title: 'x', category: 'other', recordedOn: null, file }));
+    await assert.rejects(service.upload(DEMO_PATIENT_ID, { title: 'x', category: 'other', recordedOn: null, file: { ...file, name: 'a.doc', mimeType: 'application/msword' } }));
   });
 });

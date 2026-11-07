@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 import {
   FIELDS_FOR_KIND,
@@ -11,13 +11,16 @@ import {
   blankDraft,
   canEditEntry,
   draftFromEntry,
-  permissionFor,
+  canWrite,
+  describeEntryError,
   validateDraft,
   type DraftErrors,
   type DraftField,
   type EntryDraft,
 } from '@/application/recordEntries';
+import type { Person } from '@/domain/entities/Person';
 import { ENTRY_KINDS, type EntryKind, type RecordEntryInput } from '@/domain/entities/RecordEntry';
+import type { SaveResult } from '@/presentation/hooks/useRecordEntries';
 import { AppText } from '@/presentation/components/AppText';
 import { Banner } from '@/presentation/components/Banner';
 import { Button } from '@/presentation/components/Button';
@@ -43,10 +46,10 @@ function asKind(value: string | undefined): EntryKind | null {
 /** One screen for adding a record and for editing one. `id` in the address means editing. */
 export default function EntryFormScreen() {
   const { kind: kindParam, id } = useLocalSearchParams<{ kind?: string; id?: string }>();
-  const { user, policy } = useAuth();
-  const { status, entries, add, update } = useEntries();
+  const { user } = useAuth();
+  const { status, entries, add, update, clients } = useEntries();
 
-  if (!user || !policy) return null;
+  if (!user) return null;
 
   const existing = id ? entries.find((entry) => entry.id === id) : undefined;
   const kind = existing ? existing.kind : asKind(kindParam);
@@ -62,7 +65,7 @@ export default function EntryFormScreen() {
   }
 
   // Wrong address, or a role that may not write this kind, or someone else's entry.
-  const allowed = kind && policy.can(permissionFor(kind)) && (!id || (existing && canEditEntry(policy, user, existing)));
+  const allowed = kind && canWrite(user.permissions, kind) && (!id || (existing && canEditEntry(user.permissions, user.id, existing)));
   if (!kind || !allowed) {
     return (
       <Screen>
@@ -84,6 +87,7 @@ export default function EntryFormScreen() {
       kind={kind}
       editingId={existing?.id ?? null}
       initial={existing ? draftFromEntry(existing) : blankDraft(user, new Date())}
+      loadClients={existing ? null : clients}
       onSave={async (input) =>
         existing
           ? update({ id: user.id, name: user.name, role: user.role }, existing.id, input)
@@ -105,15 +109,34 @@ interface FormProps {
   kind: EntryKind;
   editingId: string | null;
   initial: EntryDraft;
-  onSave: (input: RecordEntryInput) => Promise<unknown>;
+  /** Finds the people this record could be about. Null when editing, because that cannot change. */
+  loadClients: (() => Promise<readonly Person[]>) | null;
+  onSave: (input: RecordEntryInput) => Promise<SaveResult>;
 }
 
-function EntryForm({ kind, editingId, initial, onSave }: FormProps) {
+function EntryForm({ kind, editingId, initial, loadClients, onSave }: FormProps) {
   const [draft, setDraft] = useState<EntryDraft>(initial);
   const [errors, setErrors] = useState<DraftErrors>({});
   const [saving, setSaving] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+  const [people, setPeople] = useState<readonly Person[]>([]);
+  const [patientId, setPatientId] = useState<string | null>(null);
   const [capturing, setCapturing] = useState(false);
+
+  // A caregiver with several clients says whose record this is. With one client, the name is filled in.
+  useEffect(() => {
+    if (!loadClients) return;
+    let active = true;
+    loadClients().then((found) => {
+      if (!active) return;
+      setPeople(found);
+      if (found.length === 1) setDraft((current) => (current.clientName.trim() === '' ? { ...current, clientName: found[0].name } : current));
+    });
+    return () => {
+      active = false;
+    };
+  }, [loadClients]);
+  const needsClient = people.length > 1;
 
   const shown = FIELDS_FOR_KIND[kind];
   const show = (field: DraftField) => shown.includes(field);
@@ -127,15 +150,24 @@ function EntryForm({ kind, editingId, initial, onSave }: FormProps) {
     const result = validateDraft(kind, draft, new Date());
     if (!result.ok) {
       setErrors(result.errors);
-      setFailed(false);
+      setFailure(null);
+      return;
+    }
+    if (needsClient && !patientId) {
+      setFailure('Choose who this record is for.');
       return;
     }
     setSaving(true);
-    setFailed(false);
-    const saved = await onSave(result.input);
-    setSaving(false);
-    if (saved) goBack();
-    else setFailed(true);
+    setFailure(null);
+    try {
+      const saved = await onSave(needsClient && patientId ? { ...result.input, patientId } : result.input);
+      if (saved.ok) goBack();
+      else setFailure(saved.message);
+    } catch (error) {
+      setFailure(describeEntryError(error));
+    } finally {
+      setSaving(false);
+    }
   }
 
   if (capturing) {
@@ -179,6 +211,25 @@ function EntryForm({ kind, editingId, initial, onSave }: FormProps) {
           placeholder="Name of the person being cared for"
           autoCapitalize="words"
         />
+      ) : null}
+
+      {needsClient ? (
+        <View style={styles.block}>
+          <AppText variant="label" style={styles.blockLabel}>
+            Who is this record for?
+          </AppText>
+          <FilterChips
+            accessibilityLabel="Who this record is for"
+            selected={patientId}
+            onSelect={(value) => {
+              setPatientId(value);
+              setFailure(null);
+              const chosen = people.find((person) => person.id === value);
+              if (chosen) change('clientName', chosen.name);
+            }}
+            options={people.map((person) => ({ value: person.id, label: person.name }))}
+          />
+        </View>
       ) : null}
 
       {show('title') ? (
@@ -329,7 +380,7 @@ function EntryForm({ kind, editingId, initial, onSave }: FormProps) {
       {Object.keys(errors).some((key) => errors[key as DraftField]) ? (
         <Banner tone="error">Please fix the highlighted boxes.</Banner>
       ) : null}
-      {failed ? <Banner tone="error">We could not save this record. Please try again.</Banner> : null}
+      {failure ? <Banner tone="error">{failure}</Banner> : null}
 
       <Button label={editingId ? 'Save changes' : 'Save record'} onPress={handleSave} loading={saving} />
       <View style={styles.gap} />

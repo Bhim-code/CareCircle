@@ -43,8 +43,13 @@ export interface RecordEntryInput {
   readonly mood: Mood | null;
   // Medication only
   readonly medicineName: string | null;
-  /** Where the photo is stored. A local file for now. */
+  /** A photo of the medicine. A file on the phone until saved, then a link from the server. */
   readonly photoUri: string | null;
+  /**
+   * Whose record this is, when it is known. A caregiver with several clients must say which one;
+   * for everyone else the server works it out.
+   */
+  readonly patientId?: string;
 }
 
 /** A saved entry, with who wrote it and when. */

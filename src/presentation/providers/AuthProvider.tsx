@@ -4,10 +4,13 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
+import { AppState } from 'react-native';
 import { ACCOUNT_UPDATED_NOTICE, checkApproval, type ApprovalCheck } from '../../application/approval';
+import { checkSession, SESSION_CHECK_INTERVAL_MS, SESSION_CHECK_MIN_GAP_MS } from '../../application/permissions';
 import { policyFor } from '../../application/policies/policyFor';
 import type { DemoAccount } from '../../infrastructure/demo/DemoAuthService';
 import { isApproved, type ApprovedUser, type AuthUser } from '../../domain/entities/AuthUser';
@@ -77,6 +80,42 @@ export function AuthProvider({
     // A new sign-in or a new sign-out makes an old notice out of date.
     if (next !== null) setSignedOutNotice(null);
   }, []);
+
+  // While someone is signed in, look again from time to time at what they may do, so a change a
+  // supervisor makes reaches an app that is already open. A failed look changes nothing.
+  const accountRef = useRef(account);
+  accountRef.current = account;
+  const lastLook = useRef(0);
+  const looking = useRef(false);
+  const signedIn = status === 'signedIn';
+  useEffect(() => {
+    if (!signedIn) return;
+    lastLook.current = Date.now();
+    async function look() {
+      const current = accountRef.current;
+      if (looking.current || current === null) return;
+      looking.current = true;
+      lastLook.current = Date.now();
+      try {
+        const result = await checkSession(service, current);
+        if (result.kind === 'changed') apply(result.user);
+        else if (result.kind === 'signedOut') {
+          setSignedOutNotice(ACCOUNT_UPDATED_NOTICE);
+          apply(null);
+        }
+      } finally {
+        looking.current = false;
+      }
+    }
+    const timer = setInterval(() => void look(), SESSION_CHECK_INTERVAL_MS);
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && Date.now() - lastLook.current >= SESSION_CHECK_MIN_GAP_MS) void look();
+    });
+    return () => {
+      clearInterval(timer);
+      subscription.remove();
+    };
+  }, [signedIn, service, apply]);
 
   const user = account !== null && isApproved(account) ? account : null;
   const pendingUser = account !== null && !isApproved(account) ? account : null;
