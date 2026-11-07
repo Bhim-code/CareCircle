@@ -1,12 +1,63 @@
 import {
   DEFAULT_PREFERENCES,
   SNOOZE_CHOICES,
+  SYNCED_FIELDS,
+  type SyncedPreferences,
   type UserPreferences,
 } from '../domain/entities/UserPreferences';
+import type { IPreferencesSync } from '../domain/services/IPreferencesSync';
 
 /** The storage key for one person's settings. */
 export function preferencesKey(userId: string): string {
   return `carecircle.preferences.${userId}`;
+}
+
+/** The marker for "a change on this phone has not reached the server yet". */
+export function preferencesDirtyKey(userId: string): string {
+  return `carecircle.preferences.dirty.${userId}`;
+}
+
+/** Only the part of the settings the server keeps. */
+export function syncedPart(preferences: UserPreferences): SyncedPreferences {
+  return {
+    largerText: preferences.largerText,
+    reminderNotifications: preferences.reminderNotifications,
+    missedDoseEmail: preferences.missedDoseEmail,
+    missedDoseCall: preferences.missedDoseCall,
+  };
+}
+
+/** The settings with the server's part put in. The phone-only settings are kept. */
+export function withSynced(preferences: UserPreferences, synced: SyncedPreferences): UserPreferences {
+  return { ...preferences, ...syncedPart({ ...preferences, ...synced }) };
+}
+
+/** True when a change touches something the server keeps. */
+export function touchesSynced(change: Partial<UserPreferences>): boolean {
+  return SYNCED_FIELDS.some((field) => field in change);
+}
+
+export type Reconciled =
+  | { readonly status: 'synced'; readonly preferences: UserPreferences }
+  /** The server could not be reached. Nothing changes, and the phone's choices stay as they are. */
+  | { readonly status: 'offline' };
+
+/**
+ * Brings the phone and the server together. If the person changed something on this phone that
+ * the server has not heard of ("dirty"), the phone wins and is sent. Otherwise the server wins,
+ * which is how a new phone gets the person's settings. Never throws.
+ */
+export async function reconcile(
+  sync: IPreferencesSync,
+  local: UserPreferences,
+  dirty: boolean,
+): Promise<Reconciled> {
+  try {
+    const synced = dirty ? await sync.push(syncedPart(local)) : await sync.fetch();
+    return { status: 'synced', preferences: withSynced(local, synced) };
+  } catch {
+    return { status: 'offline' };
+  }
 }
 
 /**

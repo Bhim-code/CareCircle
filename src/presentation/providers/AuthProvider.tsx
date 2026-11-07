@@ -49,6 +49,8 @@ export interface AuthContextValue {
   requestPasswordReset(email: string): Promise<void>;
   /** Asks the backend again whether a waiting account has been approved. */
   checkApproval(): Promise<ApprovalCheck>;
+  /** Shows a name the person just saved, without signing in again. */
+  applyName(name: string): void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -173,6 +175,7 @@ export function AuthProvider({
         apply(null);
       },
       requestPasswordReset: (email) => service.requestPasswordReset(email),
+      applyName: (name) => setAccount((current) => (current === null ? current : { ...current, name })),
       checkApproval: async () => {
         const result = await checkApproval(service);
         if (result.kind === 'signedOut') {

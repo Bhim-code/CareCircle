@@ -9,10 +9,13 @@ import type { IDevControls } from './domain/services/IDevControls';
 import type { IHealthRecordService } from './domain/services/IHealthRecordService';
 import type { IMedicineService } from './domain/services/IMedicineService';
 import type { IPreferencesStore } from './domain/services/IPreferencesStore';
+import type { IPreferencesSync } from './domain/services/IPreferencesSync';
+import type { IProfileService } from './domain/services/IProfileService';
 import type { IRecordEntryService } from './domain/services/IRecordEntryService';
 import type { IReminderService } from './domain/services/IReminderService';
 import { DevModeAuthService } from './infrastructure/dev/DevModeAuthService';
 import { DEMO_ACCOUNTS, DemoAuthService, type DemoAccount } from './infrastructure/demo/DemoAuthService';
+import { DemoProfileService } from './infrastructure/demo/DemoProfileService';
 import { DemoCareLinkService } from './infrastructure/demo/DemoCareLinkService';
 import { DemoCareTaskService } from './infrastructure/demo/DemoCareTaskService';
 import { DemoHealthRecordService } from './infrastructure/demo/DemoHealthRecordService';
@@ -25,6 +28,8 @@ import { NoopAlarmScheduler } from './infrastructure/notifications/NoopAlarmSche
 import { AsyncPreferencesStore } from './infrastructure/storage/AsyncPreferencesStore';
 import { ApiClient } from './infrastructure/http/ApiClient';
 import { HttpAuthService } from './infrastructure/http/HttpAuthService';
+import { HttpPreferencesSync } from './infrastructure/http/HttpPreferencesSync';
+import { HttpProfileService } from './infrastructure/http/HttpProfileService';
 import { HttpCareLinkService } from './infrastructure/http/HttpCareLinkService';
 import { HttpCareTaskService } from './infrastructure/http/HttpCareTaskService';
 import { HttpHealthRecordService } from './infrastructure/http/HttpHealthRecordService';
@@ -110,6 +115,23 @@ export function createContainer(): Container {
  */
 export function createPreferencesStore(): IPreferencesStore {
   return new AsyncPreferencesStore();
+}
+
+/**
+ * Where the settings that should follow the person to a new phone are kept: the CareCircle
+ * backend when its address is set. Null in demo mode or with no backend, where settings
+ * stay on the phone only.
+ */
+export function createPreferencesSync(): IPreferencesSync | null {
+  if (shouldUseDemo() || !isApiConfigured) return null;
+  return new HttpPreferencesSync(createApiClient());
+}
+
+/** Changing the person's own details (their name). */
+export function createProfileService(): IProfileService | null {
+  if (shouldUseDemo()) return new DemoProfileService();
+  if (isApiConfigured) return new HttpProfileService(createApiClient());
+  return null;
 }
 
 /**

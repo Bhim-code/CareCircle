@@ -1,9 +1,11 @@
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Linking, StyleSheet, View } from 'react-native';
+import { describeProfileError, validateNewName } from '@/application/profile';
 import { formatTime } from '@/application/reminders';
 import { profileSectionsFor } from '@/application/profileSections';
 import { env } from '@/config/env';
+import { createProfileService } from '@/container';
 import { AppText } from '@/presentation/components/AppText';
 import { Banner } from '@/presentation/components/Banner';
 import { Button } from '@/presentation/components/Button';
@@ -11,6 +13,8 @@ import { FilterChips } from '@/presentation/components/FilterChips';
 import { Card } from '@/presentation/components/Card';
 import { RoleBadge } from '@/presentation/components/RoleBadge';
 import { Screen } from '@/presentation/components/Screen';
+import { TextField } from '@/presentation/components/TextField';
+import { TextLink } from '@/presentation/components/TextLink';
 import { ToggleRow } from '@/presentation/components/ToggleRow';
 import { useSubmit } from '@/presentation/hooks/useSubmit';
 import { useAlarms } from '@/presentation/providers/AlarmProvider';
@@ -31,9 +35,78 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+/** The person's name, with a way to change it. Saved on the server, then shown here at once. */
+function NameRow({ name }: { name: string }) {
+  const { applyName } = useAuth();
+  const [service] = useState(createProfileService);
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(name);
+  const [error, setError] = useState<string | undefined>();
+  const [failure, setFailure] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    const problem = validateNewName(value, name);
+    if (problem) {
+      setError(problem);
+      return;
+    }
+    if (!service) return;
+    setSaving(true);
+    setFailure(null);
+    try {
+      applyName(await service.updateName(value));
+      setEditing(false);
+    } catch (caught) {
+      setFailure(describeProfileError(caught));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!editing) {
+    return (
+      <View>
+        <DetailRow label="Name" value={name || 'Not set'} />
+        {service ? (
+          <View style={styles.nameLink}>
+            <TextLink
+              label="Change name"
+              onPress={() => {
+                setValue(name);
+                setError(undefined);
+                setFailure(null);
+                setEditing(true);
+              }}
+            />
+          </View>
+        ) : null}
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.nameEdit}>
+      <TextField
+        label="Your name"
+        value={value}
+        onChangeText={(text) => {
+          setValue(text);
+          setError(undefined);
+        }}
+        error={error}
+        autoCapitalize="words"
+      />
+      {failure ? <Banner tone="error">{failure}</Banner> : null}
+      <Button label="Save name" loading={saving} onPress={() => void handleSave()} />
+      <Button label="Cancel" variant="secondary" onPress={() => setEditing(false)} />
+    </View>
+  );
+}
+
 export default function ProfileScreen() {
   const { user, policy, signOut } = useAuth();
-  const { preferences, saveFailed, update } = usePreferences();
+  const { preferences, saveFailed, syncPending, update } = usePreferences();
   const { loading, run } = useSubmit();
   const { permission, askForPermission, sendTestAlarm } = useAlarms();
   // The test alarm button: idle, working while it is being set, then "set" until it has rung.
@@ -77,7 +150,7 @@ export default function ProfileScreen() {
       {saveFailed ? <Banner tone="error">We could not save that change. Please try again.</Banner> : null}
 
       <Card title="Your details" accent={accent}>
-        <DetailRow label="Name" value={user.name || 'Not set'} />
+        <NameRow name={user.name} />
         <DetailRow label="Email" value={user.email} />
         <DetailRow label="Account type" value={policy.displayName} />
       </Card>
@@ -175,7 +248,9 @@ export default function ProfileScreen() {
             </>
           ) : null}
           <AppText variant="caption" color={colors.inkSoft} style={styles.note}>
-            These choices are saved on this phone. Caregiver alerts are not switched on yet.
+            {syncPending
+              ? 'Saved on this phone. It will be saved to your account when you are back online.'
+              : 'These choices are saved with your account. Alarm sound, vibration and snooze stay on this phone.'}
           </AppText>
         </Card>
       ) : null}
@@ -189,6 +264,7 @@ export default function ProfileScreen() {
         />
         <AppText variant="caption" color={colors.inkSoft} style={styles.note}>
           CareCircle also follows the text size you set in your phone's settings.
+          {syncPending ? ' Your choice will be saved to your account when you are back online.' : ''}
         </AppText>
       </Card>
 
@@ -227,6 +303,8 @@ const styles = StyleSheet.create({
   header: { gap: spacing.sm, marginTop: spacing.sm, marginBottom: spacing.lg },
   detail: { gap: spacing.xs, marginBottom: spacing.md },
   note: { marginTop: spacing.sm },
+  nameLink: { alignItems: 'flex-start', marginBottom: spacing.sm },
+  nameEdit: { gap: spacing.sm, marginBottom: spacing.sm },
   support: { marginTop: spacing.sm, marginBottom: spacing.sm, gap: spacing.sm },
   snoozeLabel: { marginTop: spacing.sm, marginBottom: spacing.xs },
   signOut: { marginTop: spacing.md, marginBottom: spacing.lg },

@@ -9,6 +9,7 @@ import {
   createHealthRecordService,
   createMedicineService,
   createPreferencesStore,
+  createPreferencesSync,
   createRecordEntryService,
   createReminderService,
 } from '@/container';
@@ -39,6 +40,7 @@ function tabOptions(title: string, icon: IconName, selectedIcon: IconName, spoke
 export default function MainLayout() {
   // Settings belong to the signed-in person, so they are only loaded in this part of the app.
   const [preferencesStore] = useState(createPreferencesStore);
+  const [preferencesSync] = useState(createPreferencesSync);
   const [reminderService] = useState(createReminderService);
   const [medicineService] = useState(createMedicineService);
   const [alarmScheduler] = useState(createAlarmScheduler);
@@ -50,7 +52,7 @@ export default function MainLayout() {
   const insets = useSafeAreaInsets();
 
   return (
-    <PreferencesProvider store={preferencesStore}>
+    <PreferencesProvider store={preferencesStore} sync={preferencesSync}>
       <MedicinesProvider service={medicineService}>
       <RemindersProvider service={reminderService}>
       <AlarmProvider scheduler={alarmScheduler} reminderService={reminderService}>
