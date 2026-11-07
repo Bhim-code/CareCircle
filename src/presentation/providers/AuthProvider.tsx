@@ -61,6 +61,8 @@ interface AuthProviderProps {
   isDemo?: boolean;
   demoAccounts?: readonly DemoAccount[];
   devControls?: IDevControls | null;
+  /** Runs just before signing out, while the sign-in still works (for example to stop notifications). Must not throw. */
+  beforeSignOut?: (userId: string) => Promise<void>;
   children: ReactNode;
 }
 
@@ -69,6 +71,7 @@ export function AuthProvider({
   isDemo = false,
   demoAccounts = [],
   devControls = null,
+  beforeSignOut,
   children,
 }: AuthProviderProps) {
   const [status, setStatus] = useState<AuthStatus>('loading');
@@ -170,6 +173,8 @@ export function AuthProvider({
         return result;
       },
       signOut: async () => {
+        const who = accountRef.current;
+        if (who && beforeSignOut) await beforeSignOut(who.id).catch(() => undefined);
         await service.signOut();
         setSignedOutNotice(null);
         apply(null);
@@ -188,7 +193,7 @@ export function AuthProvider({
         return result;
       },
     }),
-    [status, user, pendingUser, signedOutNotice, isDemo, demoAccounts, devControls, service, apply],
+    [status, user, pendingUser, signedOutNotice, isDemo, demoAccounts, devControls, service, apply, beforeSignOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

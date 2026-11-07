@@ -9,6 +9,8 @@ import type { IDevControls } from './domain/services/IDevControls';
 import type { IHealthRecordService } from './domain/services/IHealthRecordService';
 import type { IMedicineService } from './domain/services/IMedicineService';
 import type { IPreferencesStore } from './domain/services/IPreferencesStore';
+import type { IAccessLogService } from './domain/services/IAccessLogService';
+import type { IPushEvents } from './domain/services/IPushEvents';
 import type { IPreferencesSync } from './domain/services/IPreferencesSync';
 import type { IProfileService } from './domain/services/IProfileService';
 import type { IRecordEntryService } from './domain/services/IRecordEntryService';
@@ -25,6 +27,14 @@ import { DemoReminderService } from './infrastructure/demo/DemoReminderService';
 import { ExpoFilePicker } from './infrastructure/device/ExpoFilePicker';
 import { NotifyKitAlarmScheduler } from './infrastructure/notifications/NotifyKitAlarmScheduler';
 import { NoopAlarmScheduler } from './infrastructure/notifications/NoopAlarmScheduler';
+import { DemoAccessLogService } from './infrastructure/demo/DemoAccessLogService';
+import { EmptyAccessLogService } from './infrastructure/supabase/EmptyAccessLogService';
+import { HttpAccessLogService } from './infrastructure/http/HttpAccessLogService';
+import { ExpoPushEvents } from './infrastructure/notifications/ExpoPushEvents';
+import { ExpoPushTokenSource } from './infrastructure/notifications/ExpoPushTokenSource';
+import { AsyncPushTokenStore } from './infrastructure/storage/AsyncPushTokenStore';
+import { HttpPushTokenService } from './infrastructure/http/HttpPushTokenService';
+import { registerPush, unregisterPush, type PushStatus } from './application/pushRegistration';
 import { AsyncPreferencesStore } from './infrastructure/storage/AsyncPreferencesStore';
 import { ApiClient } from './infrastructure/http/ApiClient';
 import { HttpAuthService } from './infrastructure/http/HttpAuthService';
@@ -55,6 +65,8 @@ export interface Container {
   readonly demoAccounts: readonly DemoAccount[];
   /** Present only in development builds. Always null in release builds. */
   readonly devControls: IDevControls | null;
+  /** Stops notifications from the server to this phone. Null when there is nothing to stop. */
+  readonly beforeSignOut: ((userId: string) => Promise<void>) | null;
 }
 
 /** True when the in-memory demo backend should be used. Never true in a release build. */
@@ -105,6 +117,7 @@ export function createContainer(): Container {
     isDemo: useDemo,
     demoAccounts: useDemo ? DEMO_ACCOUNTS : [],
     devControls,
+    beforeSignOut: (userId) => createPushRegistry()?.unregister(userId) ?? Promise.resolve(),
   };
 }
 
@@ -125,6 +138,42 @@ export function createPreferencesStore(): IPreferencesStore {
 export function createPreferencesSync(): IPreferencesSync | null {
   if (shouldUseDemo() || !isApiConfigured) return null;
   return new HttpPreferencesSync(createApiClient());
+}
+
+/** What the app does to be sent notifications from the server. */
+export interface PushRegistry {
+  /** Gives the server this phone's token (when the person has allowed notifications). */
+  register(userId: string): Promise<PushStatus>;
+  /** Takes the token back, so the phone stops getting this person's notifications. */
+  unregister(userId: string): Promise<void>;
+}
+
+/**
+ * Notifications from the server (such as "time for your medicine") need the backend. Null in
+ * demo mode or with no backend address, where there is nothing to register with.
+ */
+let pushRegistry: PushRegistry | null | undefined;
+export function createPushRegistry(): PushRegistry | null {
+  if (pushRegistry === undefined) pushRegistry = buildPushRegistry();
+  return pushRegistry;
+}
+
+function buildPushRegistry(): PushRegistry | null {
+  if (shouldUseDemo() || !isApiConfigured) return null;
+  const deps = {
+    source: new ExpoPushTokenSource(),
+    server: new HttpPushTokenService(createApiClient()),
+    store: new AsyncPushTokenStore(),
+  };
+  return {
+    register: (userId) => registerPush(deps, userId),
+    unregister: (userId) => unregisterPush(deps, userId),
+  };
+}
+
+/** What happens when a notification from the server is tapped. */
+export function createPushEvents(): IPushEvents {
+  return new ExpoPushEvents();
 }
 
 /** Changing the person's own details (their name). */
@@ -173,6 +222,13 @@ export function createCareLinkService(): ICareLinkService {
   if (shouldUseDemo()) return new DemoCareLinkService();
   if (isApiConfigured) return new HttpCareLinkService(createApiClient());
   return new EmptyCareLinkService();
+}
+
+/** Who has viewed a patient's records: made-up views in development, the backend when its address is set. */
+export function createAccessLogService(): IAccessLogService {
+  if (shouldUseDemo()) return new DemoAccessLogService();
+  if (isApiConfigured) return new HttpAccessLogService(createApiClient());
+  return new EmptyAccessLogService();
 }
 
 /**
