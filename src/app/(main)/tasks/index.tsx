@@ -2,16 +2,15 @@ import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import {
-  TASKS_COMPLETE,
-  TASKS_VIEW,
   canUndo,
-  hasPermission,
   isOpen,
   sortTasks,
   summaryText,
   taskTimeText,
   validateSkip,
 } from '@/application/careTasks';
+import { TASKS_COMPLETE, TASKS_VIEW } from '@/application/permissions';
+import { usePermission } from '@/presentation/hooks/usePermission';
 import { formatDate, formatTime } from '@/application/reminders';
 import type { ClientDay, TaskItem } from '@/domain/entities/CareTask';
 import { AppText } from '@/presentation/components/AppText';
@@ -28,7 +27,7 @@ import { colors, radius, spacing } from '@/presentation/theme/theme';
 export default function TasksScreen() {
   const now = useNow();
   const { user } = useAuth();
-  const canView = hasPermission(user?.permissions, TASKS_VIEW);
+  const canView = usePermission(TASKS_VIEW);
 
   return (
     <Screen>
@@ -50,7 +49,7 @@ export default function TasksScreen() {
 function TaskLists() {
   const { user } = useAuth();
   const { status, days, retry } = useCareTaskList();
-  const canComplete = hasPermission(user?.permissions, TASKS_COMPLETE);
+  const canComplete = usePermission(TASKS_COMPLETE);
 
   if (status === 'loading') {
     return (

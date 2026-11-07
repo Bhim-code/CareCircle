@@ -12,12 +12,12 @@ import {
   createRecordEntryService,
   createReminderService,
 } from '@/container';
-import { TASKS_VIEW, hasPermission } from '@/application/careTasks';
+import { TASKS_VIEW } from '@/application/permissions';
+import { usePermission } from '@/presentation/hooks/usePermission';
 import { AlarmProvider } from '@/presentation/providers/AlarmProvider';
 import { HealthRecordsProvider } from '@/presentation/providers/HealthRecordsProvider';
 import { CareTasksProvider } from '@/presentation/providers/CareTasksProvider';
 import { MedicinesProvider } from '@/presentation/providers/MedicinesProvider';
-import { useAuth } from '@/presentation/providers/AuthProvider';
 import { PreferencesProvider } from '@/presentation/providers/PreferencesProvider';
 import { RecordEntriesProvider } from '@/presentation/providers/RecordEntriesProvider';
 import { RemindersProvider } from '@/presentation/providers/RemindersProvider';
@@ -45,9 +45,8 @@ export default function MainLayout() {
   const [entryService] = useState(createRecordEntryService);
   const [careTaskService] = useState(createCareTaskService);
   const [healthRecordService] = useState(createHealthRecordService);
-  const { user } = useAuth();
   // Only people the backend lets see care tasks get the Tasks tab.
-  const canSeeTasks = hasPermission(user?.permissions, TASKS_VIEW);
+  const canSeeTasks = usePermission(TASKS_VIEW);
   const insets = useSafeAreaInsets();
 
   return (
@@ -82,6 +81,8 @@ export default function MainLayout() {
           options={canSeeTasks ? tabOptions('Tasks', 'checkbox-outline', 'checkbox', 'Today\'s tasks') : { href: null }}
         />
         <Tabs.Screen name="records" options={tabOptions('Records', 'document-text-outline', 'document-text', 'Health Records')} />
+        {/* Care links open from the Profile screen, not from the tab bar. */}
+        <Tabs.Screen name="care-links" options={{ href: null }} />
         {/* The alarm screen is opened by an alarm, not from the tab bar. */}
         <Tabs.Screen name="alarm" options={{ href: null, tabBarStyle: { display: 'none' } }} />
         <Tabs.Screen name="profile" options={tabOptions('Profile', 'person-outline', 'person')} />
