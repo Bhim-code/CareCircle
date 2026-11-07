@@ -23,6 +23,8 @@ export const DEMO_PASSWORD = 'demo1234';
 export const DEMO_ACCOUNTS: readonly DemoAccount[] = [
   { label: 'Patient', email: 'patient@demo.test', password: DEMO_PASSWORD },
   { label: 'Caregiver', email: 'caregiver@demo.test', password: DEMO_PASSWORD },
+  // Shows the "Waiting for approval" screen. In the demo nobody approves it.
+  { label: 'Waiting for approval', email: 'pending@demo.test', password: DEMO_PASSWORD },
 ];
 
 type Listener = (user: AuthUser | null) => void;
@@ -40,6 +42,7 @@ export class DemoAuthService implements IAuthService {
   constructor(private readonly latencyMs = 300) {
     this.seed('Ana Patient', 'patient@demo.test', 'patient');
     this.seed('Sam Caregiver', 'caregiver@demo.test', 'caregiver');
+    this.seed('Pia Pending', 'pending@demo.test', 'pending');
   }
 
   async getCurrentUser(): Promise<AuthUser | null> {
@@ -55,7 +58,9 @@ export class DemoAuthService implements IAuthService {
       id: `demo-${this.accounts.size + 1}`,
       email,
       name: input.name.trim(),
-      role: input.role,
+      // Like the real backend: a new account waits for a supervisor, whatever role it asked for.
+      role: 'pending',
+      permissions: [],
     };
     this.accounts.set(email, { user, password: input.password });
     this.setCurrent(user);
@@ -88,7 +93,7 @@ export class DemoAuthService implements IAuthService {
   }
 
   private seed(name: string, email: string, role: AuthUser['role']): void {
-    const user: AuthUser = { id: `demo-${email}`, email, name, role };
+    const user: AuthUser = { id: `demo-${email}`, email, name, role, permissions: demoPermissions(role) };
     this.accounts.set(email, { user, password: DEMO_PASSWORD });
   }
 
@@ -102,6 +107,17 @@ export class DemoAuthService implements IAuthService {
       ? new Promise((resolve) => setTimeout(resolve, this.latencyMs))
       : Promise.resolve();
   }
+}
+
+/** The same defaults the real backend gives each role. */
+function demoPermissions(role: AuthUser['role']): readonly string[] {
+  if (role === 'caregiver') {
+    return ['tasks.view', 'tasks.complete', 'entries.write.behavioural', 'entries.write.incident', 'entries.write.medication'];
+  }
+  if (role === 'patient') {
+    return ['tasks.view', 'documents.view', 'documents.upload', 'entries.write.medical', 'entries.write.incident', 'entries.write.medication'];
+  }
+  return [];
 }
 
 function normalise(email: string): string {

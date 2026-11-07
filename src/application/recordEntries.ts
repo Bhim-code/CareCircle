@@ -8,8 +8,7 @@ import {
   type RecordEntry,
   type RecordEntryInput,
 } from '../domain/entities/RecordEntry';
-import type { AuthUser } from '../domain/entities/AuthUser';
-import type { IRolePolicy, Permission } from '../domain/policies/IRolePolicy';
+import type { ApprovedUser } from '../domain/entities/AuthUser';
 import { dayKey } from './reminders';
 
 export const KIND_LABEL: Record<EntryKind, string> = {
@@ -42,25 +41,52 @@ export const MOOD_LABEL: Record<Mood, string> = {
   withdrawn: 'Withdrawn',
 };
 
-const PERMISSION_FOR_KIND: Record<EntryKind, Permission> = {
-  medical: 'entries.medical',
-  behavioural: 'entries.behavioural',
-  incident: 'entries.incident',
-  medication: 'entries.medication',
-};
-
-export function permissionFor(kind: EntryKind): Permission {
-  return PERMISSION_FOR_KIND[kind];
+/** The backend gives each person the permissions "entries.write.<kind>" (see GET /me). */
+export function writePermission(kind: EntryKind): string {
+  return `entries.write.${kind}`;
 }
 
-/** The kinds this role may write, in a fixed order. */
-export function addableKinds(policy: IRolePolicy): EntryKind[] {
-  return ENTRY_KINDS.filter((kind) => policy.can(PERMISSION_FOR_KIND[kind]));
+function allows(permissions: readonly string[] | undefined, kind: EntryKind): boolean {
+  return permissions?.includes(writePermission(kind)) ?? false;
 }
 
-/** Only the person who wrote an entry can edit it, and only for a kind their role may write. */
-export function canEditEntry(policy: IRolePolicy, user: AuthUser, entry: RecordEntry): boolean {
-  return entry.recordedBy.id === user.id && policy.can(PERMISSION_FOR_KIND[entry.kind]);
+/** Whether the person may write this kind of record. */
+export function canWrite(permissions: readonly string[] | undefined, kind: EntryKind): boolean {
+  return allows(permissions, kind);
+}
+
+/** The kinds this person may write, in a fixed order. */
+export function addableKinds(permissions: readonly string[] | undefined): EntryKind[] {
+  return ENTRY_KINDS.filter((kind) => allows(permissions, kind));
+}
+
+/** Only the person who wrote an entry can edit it, and only for a kind they may still write. */
+export function canEditEntry(permissions: readonly string[] | undefined, userId: string, entry: RecordEntry): boolean {
+  return entry.recordedBy.id === userId && allows(permissions, entry.kind);
+}
+
+/** A sentence for a record that could not be saved. It reads only `status`, `code`, `message` and `fields`. */
+export function describeEntryError(error: unknown): string {
+  const read = (key: string): unknown =>
+    typeof error === 'object' && error !== null ? (error as Record<string, unknown>)[key] : undefined;
+  const code = typeof read('code') === 'string' ? (read('code') as string) : '';
+  const status = typeof read('status') === 'number' ? (read('status') as number) : 0;
+  const message = typeof read('message') === 'string' ? (read('message') as string) : '';
+  const fields = read('fields');
+  const firstField =
+    typeof fields === 'object' && fields !== null
+      ? Object.values(fields as Record<string, unknown>).find((value): value is string => typeof value === 'string') ?? ''
+      : '';
+
+  if (code === 'network' || code === 'timeout') return 'Cannot reach the server. Check your connection and try again.';
+  if (code === 'session_expired' || code === 'unauthenticated') return 'Your sign-in has ended. Please sign in again.';
+  if (code === 'too_many_requests') return 'Too many tries for now. Please wait a little and try again.';
+  if (status === 413) return 'That photo is too big. The most allowed is 5 MB.';
+  if (status === 415) return 'Only JPEG and PNG photos can be added.';
+  if (status === 403) return message || 'Your account is not allowed to do this.';
+  if (status === 404) return 'This record is no longer available. Go back and refresh the list.';
+  if (status === 422 && (firstField || message)) return firstField || message;
+  return 'We could not save this record. Please try again.';
 }
 
 // ---------------------------------------------------------------- dates
@@ -134,7 +160,7 @@ export type DraftField = keyof EntryDraft;
 export type DraftErrors = Partial<Record<DraftField, string>>;
 
 /** A fresh form. A patient is the client, so their name is filled in. Date and time default to now. */
-export function blankDraft(user: AuthUser, now: Date): EntryDraft {
+export function blankDraft(user: ApprovedUser, now: Date): EntryDraft {
   return {
     clientName: user.role === 'patient' ? user.name : '',
     title: '',

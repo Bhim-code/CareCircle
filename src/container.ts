@@ -2,6 +2,9 @@ import { env, isApiConfigured, isSupabaseConfigured } from './config/env';
 import { Platform } from 'react-native';
 import type { IAlarmScheduler } from './domain/services/IAlarmScheduler';
 import type { IAuthService } from './domain/services/IAuthService';
+import type { ICareLinkService } from './domain/services/ICareLinkService';
+import type { ICareTaskService } from './domain/services/ICareTaskService';
+import type { IFilePicker } from './domain/services/IFilePicker';
 import type { IDevControls } from './domain/services/IDevControls';
 import type { IHealthRecordService } from './domain/services/IHealthRecordService';
 import type { IMedicineService } from './domain/services/IMedicineService';
@@ -10,20 +13,29 @@ import type { IRecordEntryService } from './domain/services/IRecordEntryService'
 import type { IReminderService } from './domain/services/IReminderService';
 import { DevModeAuthService } from './infrastructure/dev/DevModeAuthService';
 import { DEMO_ACCOUNTS, DemoAuthService, type DemoAccount } from './infrastructure/demo/DemoAuthService';
+import { DemoCareLinkService } from './infrastructure/demo/DemoCareLinkService';
+import { DemoCareTaskService } from './infrastructure/demo/DemoCareTaskService';
 import { DemoHealthRecordService } from './infrastructure/demo/DemoHealthRecordService';
 import { DemoMedicineService } from './infrastructure/demo/DemoMedicineService';
 import { DemoRecordEntryService } from './infrastructure/demo/DemoRecordEntryService';
 import { DemoReminderService } from './infrastructure/demo/DemoReminderService';
+import { ExpoFilePicker } from './infrastructure/device/ExpoFilePicker';
 import { NotifyKitAlarmScheduler } from './infrastructure/notifications/NotifyKitAlarmScheduler';
 import { NoopAlarmScheduler } from './infrastructure/notifications/NoopAlarmScheduler';
 import { AsyncPreferencesStore } from './infrastructure/storage/AsyncPreferencesStore';
 import { ApiClient } from './infrastructure/http/ApiClient';
 import { HttpAuthService } from './infrastructure/http/HttpAuthService';
+import { HttpCareLinkService } from './infrastructure/http/HttpCareLinkService';
+import { HttpCareTaskService } from './infrastructure/http/HttpCareTaskService';
+import { HttpHealthRecordService } from './infrastructure/http/HttpHealthRecordService';
+import { HttpRecordEntryService } from './infrastructure/http/HttpRecordEntryService';
 import { HttpMedicineService } from './infrastructure/http/HttpMedicineService';
 import { HttpReminderService } from './infrastructure/http/HttpReminderService';
 import { SkippedDoseStore } from './infrastructure/http/SkippedDoseStore';
 import { TokenStore } from './infrastructure/http/TokenStore';
 import { AsyncSessionStorage } from './infrastructure/storage/AsyncSessionStorage';
+import { EmptyCareLinkService } from './infrastructure/supabase/EmptyCareLinkService';
+import { EmptyCareTaskService } from './infrastructure/supabase/EmptyCareTaskService';
 import { EmptyMedicineService } from './infrastructure/supabase/EmptyMedicineService';
 import { EmptyRecordEntryService } from './infrastructure/supabase/EmptyRecordEntryService';
 import { EmptyReminderService } from './infrastructure/supabase/EmptyReminderService';
@@ -132,20 +144,49 @@ export function createMedicineService(): IMedicineService {
 }
 
 /**
- * Health records make the same choice: made-up demo records in development,
- * otherwise the real backend (not built yet, so empty).
+ * Care links (who looks after whom) make the same choice: made-up demo links in
+ * development, the CareCircle backend when its address is set, otherwise nothing.
+ */
+export function createCareLinkService(): ICareLinkService {
+  if (shouldUseDemo()) return new DemoCareLinkService();
+  if (isApiConfigured) return new HttpCareLinkService(createApiClient());
+  return new EmptyCareLinkService();
+}
+
+/**
+ * Daily care tasks make the same choice: made-up demo tasks in development, the
+ * CareCircle backend when its address is set, otherwise nothing.
+ */
+export function createCareTaskService(): ICareTaskService {
+  if (shouldUseDemo()) return new DemoCareTaskService();
+  if (isApiConfigured) return new HttpCareTaskService(createApiClient());
+  return new EmptyCareTaskService();
+}
+
+/**
+ * Health documents make the same choice: made-up demo documents in development,
+ * the CareCircle backend when its address is set, otherwise nothing.
  */
 export function createHealthRecordService(): IHealthRecordService {
-  return shouldUseDemo() ? new DemoHealthRecordService() : new EmptyHealthRecordService();
+  if (shouldUseDemo()) return new DemoHealthRecordService();
+  if (isApiConfigured) return new HttpHealthRecordService(createApiClient());
+  return new EmptyHealthRecordService();
+}
+
+/** Taking or choosing a photo, and choosing a PDF, on the phone. */
+export function createFilePicker(): IFilePicker {
+  return new ExpoFilePicker();
 }
 
 /**
  * Written records (incidents, medical, behavioural, medication notes) make the
- * same choice: made-up demo entries in development, otherwise the real backend
- * (not built yet, so empty).
+ * same choice: made-up demo entries in development, the CareCircle backend when
+ * its address is set, otherwise nothing.
  */
 export function createRecordEntryService(): IRecordEntryService {
-  return shouldUseDemo() ? new DemoRecordEntryService() : new EmptyRecordEntryService();
+  if (shouldUseDemo()) return new DemoRecordEntryService();
+  if (isApiConfigured) return new HttpRecordEntryService(createApiClient());
+  return new EmptyRecordEntryService();
 }
 
 /**

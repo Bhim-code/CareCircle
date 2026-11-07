@@ -249,15 +249,19 @@ describe('HttpAuthService current user and sign-out', () => {
 
   it('tells listeners when the backend ends the sign-in during normal use', async () => {
     let signedIn = false;
+    let ended = false;
     const { service, api, heard } = setup((s) => {
       if (s.path === '/auth/sign-in') {
         signedIn = true;
         return json(200, sessionFor('patient'));
       }
       assert.ok(signedIn);
+      // Right after sign-in the app asks /me what the person may do.
+      if (s.path === '/me' && !ended) return json(200, { ...sessionFor('patient').user, permissions: ['tasks.view'] });
       return apiError(401, 'unauthenticated', s.path === '/auth/refresh' ? 'Reused.' : 'Expired.');
     });
     await service.signIn('ana@example.org', 'demo1234');
+    ended = true;
     await assert.rejects(api.get('/reminders'), (e: ApiError) => e.code === 'session_expired');
     assert.equal(heard.at(-1), null);
   });
@@ -317,5 +321,93 @@ describe('mapApiAuthError', () => {
 describe('describeAuthError for the new code', () => {
   it('explains that staff accounts belong on the admin page', () => {
     assert.match(describeAuthError(new AuthError('staff_account')), /admin page/i);
+  });
+});
+
+describe('HttpAuthService accounts waiting for approval', () => {
+  it('signs up without sending a role, and keeps the sign-in of the waiting account', async () => {
+    const { service, tokens, seen, heard } = setup(() => json(201, sessionFor('pending')));
+    const result = await service.signUp({ name: 'Ana', email: 'ana@example.org', password: 'longpassword' });
+    assert.equal(result.user?.role, 'pending');
+    assert.equal('role' in (seen[0].body ?? {}), false);
+    assert.notEqual(await tokens.get(), null);
+    assert.deepEqual(heard, [result.user]);
+  });
+
+  it('still sends a role when the caller gives one, as a hint', async () => {
+    const { service, seen } = setup(() => json(201, sessionFor('pending')));
+    await service.signUp({ name: 'Ana', email: 'ana@example.org', password: 'longpassword', role: 'caregiver' });
+    assert.equal(seen[0].body?.role, 'caregiver');
+  });
+
+  it('signs a waiting person in, with the role "pending", and keeps the tokens', async () => {
+    const { service, tokens } = setup(() => json(200, sessionFor('pending')));
+    const user = await service.signIn('ana@example.org', 'demo1234');
+    assert.deepEqual(user, { id: 'u-1', email: 'ana@example.org', name: 'Ana', role: 'pending' });
+    assert.notEqual(await tokens.get(), null);
+  });
+
+  it('sees that the account was approved when the profile shows a role', async () => {
+    let role = 'pending';
+    const { service } = setup((s) => (s.path === '/auth/sign-in' ? json(200, sessionFor(role)) : json(200, sessionFor(role).user)));
+    await service.signIn('ana@example.org', 'demo1234');
+    assert.equal((await service.getCurrentUser())?.role, 'pending');
+    role = 'patient';
+    assert.equal((await service.getCurrentUser())?.role, 'patient');
+  });
+
+  it('is signed out, and tells listeners, when a supervisor gave a role and the backend ended the sign-in', async () => {
+    let ended = false;
+    const { service, tokens, heard } = setup((s) => {
+      if (s.path === '/auth/sign-in') return json(200, sessionFor('pending'));
+      return ended ? apiError(401, 'unauthenticated', 'Expired.') : json(200, sessionFor('pending').user);
+    });
+    await service.signIn('ana@example.org', 'demo1234');
+    ended = true;
+    assert.equal(await service.getCurrentUser(), null);
+    assert.equal(await tokens.get(), null);
+    assert.equal(heard[heard.length - 1], null);
+  });
+});
+
+describe('HttpAuthService permissions', () => {
+  it('asks /me what the person may do right after signing in', async () => {
+    const { service, seen } = setup((s) =>
+      s.path === '/auth/sign-in'
+        ? json(200, sessionFor('caregiver'))
+        : json(200, { ...sessionFor('caregiver').user, permissions: ['tasks.view', 'tasks.complete'] }),
+    );
+    const user = await service.signIn('sam@example.org', 'demo1234');
+    assert.deepEqual(user.permissions, ['tasks.view', 'tasks.complete']);
+    assert.deepEqual(seen.map((s) => s.path), ['/auth/sign-in', '/me']);
+    assert.equal(seen[1].auth, 'Bearer access-1');
+  });
+
+  it('still signs in, with no permissions, when /me cannot be read', async () => {
+    const { service, tokens } = setup((s) => (s.path === '/auth/sign-in' ? json(200, sessionFor('caregiver')) : json(500, {})));
+    const user = await service.signIn('sam@example.org', 'demo1234');
+    assert.equal(user.role, 'caregiver');
+    assert.equal(user.permissions, undefined);
+    assert.notEqual(await tokens.get(), null);
+  });
+
+  it('ignores a permission list that is not a list of text', async () => {
+    const { service } = setup((s) =>
+      s.path === '/auth/sign-in' ? json(200, sessionFor('patient')) : json(200, { ...sessionFor('patient').user, permissions: [1, 2] }),
+    );
+    assert.equal((await service.signIn('ana@example.org', 'demo1234')).permissions, undefined);
+  });
+
+  it('keeps the permissions when the app restarts and asks /me', async () => {
+    const first = setup((s) =>
+      s.path === '/auth/sign-in' ? json(200, sessionFor('patient')) : json(200, { ...sessionFor('patient').user, permissions: ['tasks.view'] }),
+    );
+    await first.service.signIn('ana@example.org', 'demo1234');
+    const api = new ApiClient({
+      baseUrl: BASE,
+      tokens: new TokenStore(first.storage),
+      fetch: (async () => json(200, { ...sessionFor('patient').user, permissions: ['tasks.view'] })) as unknown as typeof fetch,
+    });
+    assert.deepEqual((await new HttpAuthService(api).getCurrentUser())?.permissions, ['tasks.view']);
   });
 });

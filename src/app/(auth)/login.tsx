@@ -16,7 +16,7 @@ import { RoleChoice } from '@/presentation/components/RoleChoice';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { signIn, isDemo, demoAccounts, dev } = useAuth();
+  const { signIn, isDemo, demoAccounts, dev, signedOutNotice } = useAuth();
   const { loading, error, run, clearError } = useSubmit();
 
   const [email, setEmail] = useState('');
@@ -62,6 +62,7 @@ export default function LoginScreen() {
         </View>
       ) : null}
 
+      {signedOutNotice ? <Banner tone="info">{signedOutNotice}</Banner> : null}
       {error ? <Banner tone="error">{error}</Banner> : null}
 
       <TextField

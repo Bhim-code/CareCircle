@@ -1,15 +1,26 @@
-import type { HealthRecord } from '../../domain/entities/HealthRecord';
+import type { DocumentUpload, HealthRecord } from '../../domain/entities/HealthRecord';
+import type { Person } from '../../domain/entities/Person';
 import type { IHealthRecordService } from '../../domain/services/IHealthRecordService';
 
-/**
- * Placeholder for the real backend. The database has no health-records table
- * yet, so there is nothing to read and the list is always empty.
- *
- * TODO: replace with a SupabaseHealthRecordService once a health_records table
- * exists with row-level security, so each person can only read their own rows.
- */
+/** Used when no backend address is set (and not in demo mode): there are no documents to show. */
 export class EmptyHealthRecordService implements IHealthRecordService {
   async list(_userId: string): Promise<readonly HealthRecord[]> {
+    return [];
+  }
+
+  async upload(_userId: string, _input: DocumentUpload): Promise<HealthRecord> {
+    throw new Error('Documents are not available yet.');
+  }
+
+  async remove(_userId: string, _recordId: string): Promise<void> {
+    throw new Error('Documents are not available yet.');
+  }
+
+  async freshLink(_userId: string, _recordId: string): Promise<string | null> {
+    return null;
+  }
+
+  async clients(_userId: string): Promise<readonly Person[]> {
     return [];
   }
 }

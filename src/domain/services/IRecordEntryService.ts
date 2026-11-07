@@ -1,4 +1,5 @@
 import type { EntryAuthor, RecordEntry, RecordEntryInput } from '../entities/RecordEntry';
+import type { Person } from '../entities/Person';
 
 /**
  * Where a person's written records (incidents, medical, behavioural and
@@ -16,4 +17,7 @@ export interface IRecordEntryService {
 
   /** Replaces the details of an entry and marks it edited. The recorded time never changes. */
   update(author: EntryAuthor, entryId: string, input: RecordEntryInput): Promise<RecordEntry>;
+
+  /** The people this person writes records about (their clients, for a caregiver). */
+  clients(viewerId: string): Promise<readonly Person[]>;
 }
