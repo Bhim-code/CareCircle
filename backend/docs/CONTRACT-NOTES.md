@@ -132,8 +132,18 @@ default). Permissions: `tasks.view`, `tasks.complete`.
   A nice "Privacy" screen; it also answers the consent question in Issue 11.
 
 **Reminders and medicines**
-- `GET /reminders?day=…&timezone=…`: `timezone` is optional and defaults to the account's.
+- `GET /reminders?day=…&timezone=…`: `timezone` is optional and defaults to the patient's.
   Send the phone's zone if the person travels.
+- Each reminder also has `skipped` (true/false), `status` (`upcoming`, `due`, `taken`,
+  `skipped`, `missed`, worked out by the server), `patientId` and `patientName`.
+- **Caregivers** can call `GET /reminders?day=…` too: they get the doses of every linked
+  patient (sorted by time), or of one with `&patientId=…`. An unlinked patient gives 404.
+  Caregivers can read doses but never confirm or skip them (403).
+- `POST /reminders/{id}/skip` (patient only): the alarm's **Skip**. **204**. Skipping again is
+  harmless. A dose already taken gives **409** `already_taken`; more than 60 minutes early gives
+  **422** `not_due`. Skipped doses show as `skipped`, never `missed`, and send no missed-dose
+  alert to caregivers and no "time for your dose" push. Taking a skipped dose later is allowed
+  (`acknowledge` clears the skip). The phone no longer needs to remember skips itself.
 - `POST /reminders/{id}/acknowledge` more than 60 minutes **before** the time gives **422**
   `not_due`. Late confirmations are accepted and stored.
 - `DELETE /medicines/{id}` stops a medicine from now on: past and confirmed doses stay, future

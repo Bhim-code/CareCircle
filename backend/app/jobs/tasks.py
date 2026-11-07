@@ -78,7 +78,7 @@ def send_missed_dose_alerts(db: Session, now: datetime | None = None) -> int:
         .join(CareLink, (CareLink.patient_id == Reminder.patient_id) & (CareLink.status == "active"))
         .join(caregiver, caregiver.c.id == CareLink.caregiver_id)
         .outerjoin(UserPreferences, UserPreferences.user_id == caregiver.c.id)
-        .where(Reminder.acknowledged_at.is_(None),
+        .where(Reminder.acknowledged_at.is_(None), Reminder.skipped_at.is_(None),
                Reminder.scheduled_at <= cutoff,
                Reminder.scheduled_at > now - ALERT_LOOKBACK,
                patient.c.is_active.is_(True), caregiver.c.is_active.is_(True))
@@ -120,6 +120,7 @@ def send_due_notifications(db: Session, now: datetime | None = None) -> int:
         .join(User, User.id == Reminder.patient_id)
         .outerjoin(UserPreferences, UserPreferences.user_id == User.id)
         .where(Reminder.due_notified_at.is_(None), Reminder.acknowledged_at.is_(None),
+               Reminder.skipped_at.is_(None),
                Reminder.scheduled_at <= now, Reminder.scheduled_at > now - DUE_WINDOW,
                User.is_active.is_(True),
                UserPreferences.reminder_notifications.is_not(False))

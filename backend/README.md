@@ -60,7 +60,7 @@ or `DATABASE_URL` in `.env` is wrong.
 pytest
 ```
 
-193 tests run against a real PostgreSQL database built from the migrations, in about
+209 tests run against a real PostgreSQL database built from the migrations, in about
 20 seconds. They always use `TEST_DATABASE_URL` (default `carecircle_test`), never your
 data. GitHub Actions runs them on every push (`.github/workflows/backend.yml`).
 
@@ -113,7 +113,7 @@ The full list with request and response shapes is at http://localhost:8000/docs.
 | Sign-in | `POST /auth/sign-up`, `/auth/sign-in`, `/auth/refresh`, `/auth/sign-out`, `/auth/password-reset`, `/auth/password-reset/confirm` |
 | Me | `GET/PATCH /me`, `GET/PUT /me/preferences`, `PUT/DELETE /me/push-token`, `GET /me/access-log` |
 | Care links | `POST /care-links/invitations`, `GET /care-links`, `POST /care-links/invitations/{id}/accept`, `DELETE /care-links/{id}` |
-| Medicines | `GET/POST /medicines`, `DELETE /medicines/{id}`, `GET /reminders?day=`, `POST /reminders/{id}/acknowledge` |
+| Medicines | `GET/POST /medicines`, `DELETE /medicines/{id}`, `GET /reminders?day=` (patients; caregivers for linked patients), `POST /reminders/{id}/acknowledge`, `POST /reminders/{id}/skip` |
 | Records | `GET/POST /health-records` (POST = upload a PDF or photo), `DELETE /health-records/{id}`, `GET /files/documents/{id}`, `GET/POST /entries`, `PUT /entries/{id}`, `POST /entries/photo`, `GET /files/photos/{id}` |
 | Care tasks | `GET /tasks`, `POST/DELETE /tasks/{id}/complete`, `POST /tasks/extra`, `GET/POST /tasks/plan`, `PATCH /tasks/plan/{id}` (with `tasks.plan`; only supervisors remove tasks); admin: `GET/POST /admin/patients/{id}/tasks`, `PATCH/DELETE /admin/tasks/{id}`, `GET /admin/today`, `POST/DELETE /admin/tasks/{id}/complete` |
 | People and roles | `GET /admin/me`, `GET/POST /admin/users`, `GET/PATCH/DELETE /admin/users/{id}` (profile; delete = turn off), `PUT /admin/users/{id}/role`, `PUT /admin/users/{id}/permissions`, `POST/DELETE /admin/users/{id}/photo`, `GET /admin/permissions`, `GET/POST /admin/roles`, `PATCH/DELETE /admin/roles/{id}` |

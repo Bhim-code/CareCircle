@@ -49,7 +49,8 @@ def test_caregivers_cannot_use_patient_endpoints(client):
     sam = sign_up(client, "Sam", "caregiver")
     link(client, ana, sam)
     assert client.get("/medicines", headers=sam.auth).status_code == 403
-    assert client.get("/reminders?day=2026-10-15", headers=sam.auth).status_code == 403
+    # Reminders are different: a linked caregiver may read them (see test_skip_doses.py).
+    assert client.get("/reminders?day=2026-10-15", headers=sam.auth).status_code == 200
     # Documents are different: a linked caregiver may see them (see test_documents.py).
     assert client.get("/health-records", headers=sam.auth).status_code == 200
 
@@ -64,7 +65,10 @@ def test_reminders_are_the_patients_own_and_in_contract_shape(client, db):
     response = client.get("/reminders?day=2026-10-15", headers=ana.auth)
     assert response.status_code == 200
     [reminder] = response.json()
-    assert set(reminder) == {"id", "medicineName", "scheduledAt", "acknowledged"}
+    # The contract fields, plus additions (see CONTRACT-NOTES.md).
+    assert set(reminder) == {"id", "medicineName", "scheduledAt", "acknowledged",
+                             "skipped", "status", "patientId", "patientName"}
+    assert reminder["patientId"] == ana.id and reminder["skipped"] is False
     assert reminder["medicineName"] == "Metformin"
     assert reminder["scheduledAt"] == "2026-10-15T12:00:00.000Z"
     assert reminder["acknowledged"] is False

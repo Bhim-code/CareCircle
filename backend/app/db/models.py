@@ -338,6 +338,8 @@ class Reminder(Base):
         Index("reminders_patient_time_idx", "patient_id", "scheduled_at"),
         Index("reminders_unconfirmed_idx", "scheduled_at",
               postgresql_where=text("acknowledged_at IS NULL")),
+        CheckConstraint("acknowledged_at IS NULL OR skipped_at IS NULL",
+                        name="reminders_taken_or_skipped"),
     )
 
     id: Mapped[uuid.UUID] = _id()
@@ -346,6 +348,8 @@ class Reminder(Base):
         UUID(as_uuid=True), ForeignKey("medicines.id", ondelete="CASCADE"), nullable=False)
     scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # "Skip" on the alarm: the patient chose not to take this dose. Set only by the patient.
+    skipped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     due_notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = _created()
 

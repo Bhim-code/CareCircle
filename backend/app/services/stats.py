@@ -16,11 +16,14 @@ def missed_after() -> timedelta:
 
 
 def reminder_status(scheduled_at: datetime, acknowledged_at: datetime | None,
-                    now: datetime | None = None) -> str:
-    """Same rule as the app: due for 60 minutes from the scheduled time, then missed."""
+                    now: datetime | None = None, skipped_at: datetime | None = None) -> str:
+    """Same rule as the app: due for 60 minutes from the scheduled time, then missed.
+    A dose the patient chose to skip is "skipped", never "missed"."""
     now = now or utcnow()
     if acknowledged_at is not None:
         return "taken"
+    if skipped_at is not None:
+        return "skipped"
     if now < scheduled_at:
         return "upcoming"
     if now < scheduled_at + missed_after():
@@ -41,10 +44,12 @@ def reminder_counts(db: Session, start: datetime, end: datetime,
                     organization_id: uuid.UUID | None = None) -> dict[str, int]:
     now = utcnow()
     taken = Reminder.acknowledged_at.is_not(None)
-    open_ = Reminder.acknowledged_at.is_(None)
+    skipped = and_(Reminder.acknowledged_at.is_(None), Reminder.skipped_at.is_not(None))
+    open_ = and_(Reminder.acknowledged_at.is_(None), Reminder.skipped_at.is_(None))
     query = select(
         func.count(),
         func.count().filter(taken),
+        func.count().filter(skipped),
         func.count().filter(and_(open_, Reminder.scheduled_at + missed_after() <= now)),
         func.count().filter(and_(open_, Reminder.scheduled_at <= now,
                                  Reminder.scheduled_at + missed_after() > now)),
@@ -53,13 +58,15 @@ def reminder_counts(db: Session, start: datetime, end: datetime,
     if patient_id:
         query = query.where(Reminder.patient_id == patient_id)
     query = _in_company(query, organization_id)
-    total, taken_n, missed, due, upcoming = db.execute(query).one()
-    return {"total": total, "taken": taken_n, "missed": missed, "due": due, "upcoming": upcoming}
+    total, taken_n, skipped_n, missed, due, upcoming = db.execute(query).one()
+    return {"total": total, "taken": taken_n, "skipped": skipped_n, "missed": missed, "due": due,
+            "upcoming": upcoming}
 
 
 def adherence(db: Session, days: int = 7, patient_id: uuid.UUID | None = None,
               organization_id: uuid.UUID | None = None) -> float | None:
-    """Confirmed doses / doses whose confirmation window has closed, over the last N days."""
+    """Confirmed doses / doses whose confirmation window has closed, over the last N days.
+    Skipped doses count as not taken: skipping is a choice, but the dose was still not taken."""
     now = utcnow()
     closed = Reminder.scheduled_at + missed_after() <= now
     query = select(

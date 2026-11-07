@@ -20,6 +20,7 @@ class Page(CamelModel, Generic[T]):
 class RemindersToday(CamelModel):
     total: int
     taken: int
+    skipped: int = 0
     missed: int
     due: int
     upcoming: int
@@ -108,7 +109,8 @@ class AdminReminderOut(CamelModel):
     medicine_name: str
     scheduled_at: UtcDateTime
     acknowledged_at: UtcDateTime | None
-    status: Literal["upcoming", "due", "taken", "missed"]
+    skipped_at: UtcDateTime | None = None
+    status: Literal["upcoming", "due", "taken", "skipped", "missed"]
 
 
 class AdminDocumentOut(CamelModel):

@@ -57,7 +57,8 @@ def test_overview_counts_come_from_the_database(client, world):
     assert body["patients"] == 2 and body["caregivers"] == 1 and body["activeLinks"] == 1
     assert body["entriesLast7Days"] == 2
     today = body["remindersToday"]
-    assert today["taken"] + today["missed"] + today["due"] + today["upcoming"] == today["total"]
+    assert (today["taken"] + today["skipped"] + today["missed"] + today["due"] + today["upcoming"]
+            == today["total"])
     assert body["adherenceLast7Days"] == 0.5  # 1 of 2 closed doses confirmed
 
 
