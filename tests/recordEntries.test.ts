@@ -40,15 +40,14 @@ describe('who can write which kind', () => {
   it('caregivers write behavioural, incident and medication records', () => {
     assert.deepEqual(addableKinds(DEMO_CAREGIVER_PERMISSIONS), ['behavioural', 'incident', 'medication']);
   });
-  it('both roles can file an incident and see the written records', () => {
-    for (const role of ['patient', 'caregiver'] as const) {
-      assert.equal(policyFor(role).can('entries.incident'), true);
-      assert.equal(policyFor(role).can('entries.view'), true);
-    }
+  it('both roles can file an incident, and both see the written records', () => {
+    assert.ok(addableKinds(DEMO_PATIENT_PERMISSIONS).includes('incident'));
+    assert.ok(addableKinds(DEMO_CAREGIVER_PERMISSIONS).includes('incident'));
+    for (const role of ['patient', 'caregiver'] as const) assert.equal(policyFor(role).can('entries.view'), true);
   });
   it('a patient cannot write behavioural records and a caregiver cannot write medical ones', () => {
-    assert.equal(policyFor('patient').can('entries.behavioural'), false);
-    assert.equal(policyFor('caregiver').can('entries.medical'), false);
+    assert.ok(!addableKinds(DEMO_PATIENT_PERMISSIONS).includes('behavioural'));
+    assert.ok(!addableKinds(DEMO_CAREGIVER_PERMISSIONS).includes('medical'));
   });
 });
 

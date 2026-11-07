@@ -25,7 +25,7 @@ import {
   sortEntries,
   type EntryFilter,
 } from '@/application/recordEntries';
-import { hasPermission } from '@/application/careTasks';
+import { hasPermission } from '@/application/permissions';
 import { DOCUMENTS_UPLOAD, DOCUMENTS_VIEW, fileSummary } from '@/application/documents';
 import type { EntryKind } from '@/domain/entities/RecordEntry';
 import { AppText } from '@/presentation/components/AppText';

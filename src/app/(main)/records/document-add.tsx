@@ -1,8 +1,9 @@
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
-import { hasPermission } from '@/application/careTasks';
-import { DOCUMENTS_UPLOAD, formatSize, kindOfFile, validateUpload, type UploadDraft, type UploadErrors } from '@/application/documents';
+import { usePermission } from '@/presentation/hooks/usePermission';
+import { DOCUMENTS_UPLOAD } from '@/application/permissions';
+import { formatSize, kindOfFile, validateUpload, type UploadDraft, type UploadErrors } from '@/application/documents';
 import { categoryLabel, filterLabel } from '@/application/healthRecords';
 import { createFilePicker } from '@/container';
 import { HEALTH_RECORD_CATEGORIES, type PickedFile } from '@/domain/entities/HealthRecord';
@@ -26,7 +27,7 @@ function goBack() {
 
 export default function AddDocumentScreen() {
   const { user } = useAuth();
-  const allowed = hasPermission(user?.permissions, DOCUMENTS_UPLOAD);
+  const allowed = usePermission(DOCUMENTS_UPLOAD);
   return (
     <Screen>
       <View style={styles.back}>

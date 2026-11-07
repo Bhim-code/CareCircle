@@ -15,14 +15,8 @@ export const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
   missed: 'Missed',
 };
 
-/** Permissions the server gives (see GET /me). */
-export const TASKS_VIEW = 'tasks.view';
-export const TASKS_COMPLETE = 'tasks.complete';
-
-/** Whether the person may do something. A missing list means nothing is allowed. */
-export function hasPermission(permissions: readonly string[] | undefined, permission: string): boolean {
-  return permissions?.includes(permission) ?? false;
-}
+// The permission codes and the check live in permissions.ts. They are still offered from here.
+export { TASKS_COMPLETE, TASKS_VIEW, hasPermission } from './permissions';
 
 /** A task that still needs someone to act on it. */
 export function isOpen(status: TaskStatus): boolean {
