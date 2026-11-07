@@ -9,6 +9,7 @@ import type { IDevControls } from './domain/services/IDevControls';
 import type { IHealthRecordService } from './domain/services/IHealthRecordService';
 import type { IMedicineService } from './domain/services/IMedicineService';
 import type { IPreferencesStore } from './domain/services/IPreferencesStore';
+import type { IAccessLogService } from './domain/services/IAccessLogService';
 import type { IPushEvents } from './domain/services/IPushEvents';
 import type { IPreferencesSync } from './domain/services/IPreferencesSync';
 import type { IProfileService } from './domain/services/IProfileService';
@@ -26,6 +27,9 @@ import { DemoReminderService } from './infrastructure/demo/DemoReminderService';
 import { ExpoFilePicker } from './infrastructure/device/ExpoFilePicker';
 import { NotifyKitAlarmScheduler } from './infrastructure/notifications/NotifyKitAlarmScheduler';
 import { NoopAlarmScheduler } from './infrastructure/notifications/NoopAlarmScheduler';
+import { DemoAccessLogService } from './infrastructure/demo/DemoAccessLogService';
+import { EmptyAccessLogService } from './infrastructure/supabase/EmptyAccessLogService';
+import { HttpAccessLogService } from './infrastructure/http/HttpAccessLogService';
 import { ExpoPushEvents } from './infrastructure/notifications/ExpoPushEvents';
 import { ExpoPushTokenSource } from './infrastructure/notifications/ExpoPushTokenSource';
 import { AsyncPushTokenStore } from './infrastructure/storage/AsyncPushTokenStore';
@@ -218,6 +222,13 @@ export function createCareLinkService(): ICareLinkService {
   if (shouldUseDemo()) return new DemoCareLinkService();
   if (isApiConfigured) return new HttpCareLinkService(createApiClient());
   return new EmptyCareLinkService();
+}
+
+/** Who has viewed a patient's records: made-up views in development, the backend when its address is set. */
+export function createAccessLogService(): IAccessLogService {
+  if (shouldUseDemo()) return new DemoAccessLogService();
+  if (isApiConfigured) return new HttpAccessLogService(createApiClient());
+  return new EmptyAccessLogService();
 }
 
 /**

@@ -87,6 +87,7 @@ export default function MainLayout() {
         <Tabs.Screen name="records" options={tabOptions('Records', 'document-text-outline', 'document-text', 'Health Records')} />
         {/* Care links open from the Profile screen, not from the tab bar. */}
         <Tabs.Screen name="care-links" options={{ href: null }} />
+        <Tabs.Screen name="access-log" options={{ href: null }} />
         {/* The alarm screen is opened by an alarm, not from the tab bar. */}
         <Tabs.Screen name="alarm" options={{ href: null, tabBarStyle: { display: 'none' } }} />
         <Tabs.Screen name="profile" options={tabOptions('Profile', 'person-outline', 'person')} />
