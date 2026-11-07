@@ -18,6 +18,7 @@ export default function RootLayout() {
       isDemo={container.isDemo}
       demoAccounts={container.demoAccounts}
       devControls={container.devControls}
+      beforeSignOut={container.beforeSignOut ?? undefined}
     >
       <StatusBar style="dark" />
       <View style={styles.fill}>

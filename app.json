@@ -42,6 +42,12 @@
       "expo-router",
       "expo-system-ui",
       [
+        "expo-notifications",
+        {
+          "color": "#1F5F7A"
+        }
+      ],
+      [
         "expo-audio",
         {
           "microphonePermission": false

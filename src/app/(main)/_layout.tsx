@@ -19,6 +19,7 @@ import { AlarmProvider } from '@/presentation/providers/AlarmProvider';
 import { HealthRecordsProvider } from '@/presentation/providers/HealthRecordsProvider';
 import { CareTasksProvider } from '@/presentation/providers/CareTasksProvider';
 import { MedicinesProvider } from '@/presentation/providers/MedicinesProvider';
+import { PushRegistration } from '@/presentation/components/PushRegistration';
 import { PreferencesProvider } from '@/presentation/providers/PreferencesProvider';
 import { RecordEntriesProvider } from '@/presentation/providers/RecordEntriesProvider';
 import { RemindersProvider } from '@/presentation/providers/RemindersProvider';
@@ -59,6 +60,7 @@ export default function MainLayout() {
       <RecordEntriesProvider service={entryService}>
       <CareTasksProvider service={careTaskService}>
       <HealthRecordsProvider service={healthRecordService}>
+      <PushRegistration />
       <Tabs
         screenOptions={{
           headerShown: false,
