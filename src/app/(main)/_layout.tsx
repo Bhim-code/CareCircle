@@ -9,6 +9,7 @@ import {
   createHealthRecordService,
   createMedicineService,
   createPreferencesStore,
+  createPreferencesSync,
   createRecordEntryService,
   createReminderService,
 } from '@/container';
@@ -18,6 +19,7 @@ import { AlarmProvider } from '@/presentation/providers/AlarmProvider';
 import { HealthRecordsProvider } from '@/presentation/providers/HealthRecordsProvider';
 import { CareTasksProvider } from '@/presentation/providers/CareTasksProvider';
 import { MedicinesProvider } from '@/presentation/providers/MedicinesProvider';
+import { PushRegistration } from '@/presentation/components/PushRegistration';
 import { PreferencesProvider } from '@/presentation/providers/PreferencesProvider';
 import { RecordEntriesProvider } from '@/presentation/providers/RecordEntriesProvider';
 import { RemindersProvider } from '@/presentation/providers/RemindersProvider';
@@ -39,6 +41,7 @@ function tabOptions(title: string, icon: IconName, selectedIcon: IconName, spoke
 export default function MainLayout() {
   // Settings belong to the signed-in person, so they are only loaded in this part of the app.
   const [preferencesStore] = useState(createPreferencesStore);
+  const [preferencesSync] = useState(createPreferencesSync);
   const [reminderService] = useState(createReminderService);
   const [medicineService] = useState(createMedicineService);
   const [alarmScheduler] = useState(createAlarmScheduler);
@@ -50,13 +53,14 @@ export default function MainLayout() {
   const insets = useSafeAreaInsets();
 
   return (
-    <PreferencesProvider store={preferencesStore}>
+    <PreferencesProvider store={preferencesStore} sync={preferencesSync}>
       <MedicinesProvider service={medicineService}>
       <RemindersProvider service={reminderService}>
       <AlarmProvider scheduler={alarmScheduler} reminderService={reminderService}>
       <RecordEntriesProvider service={entryService}>
       <CareTasksProvider service={careTaskService}>
       <HealthRecordsProvider service={healthRecordService}>
+      <PushRegistration />
       <Tabs
         screenOptions={{
           headerShown: false,
@@ -83,6 +87,7 @@ export default function MainLayout() {
         <Tabs.Screen name="records" options={tabOptions('Records', 'document-text-outline', 'document-text', 'Health Records')} />
         {/* Care links open from the Profile screen, not from the tab bar. */}
         <Tabs.Screen name="care-links" options={{ href: null }} />
+        <Tabs.Screen name="access-log" options={{ href: null }} />
         {/* The alarm screen is opened by an alarm, not from the tab bar. */}
         <Tabs.Screen name="alarm" options={{ href: null, tabBarStyle: { display: 'none' } }} />
         <Tabs.Screen name="profile" options={tabOptions('Profile', 'person-outline', 'person')} />
