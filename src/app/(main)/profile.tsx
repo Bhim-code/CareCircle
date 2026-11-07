@@ -170,6 +170,15 @@ export default function ProfileScreen() {
         </View>
       </Card>
 
+      {sections.caregiverContacts ? (
+        <Card title="Privacy" accent={accent}>
+          <AppText color={colors.inkSoft}>See who has looked at your records, and when.</AppText>
+          <View style={styles.support}>
+            <Button label="Who has viewed my records" variant="secondary" onPress={() => router.push('/access-log')} />
+          </View>
+        </Card>
+      ) : null}
+
       {hasNotificationChoices ? (
         <Card title="Notifications" accent={accent}>
           {sections.reminderNotifications ? (
