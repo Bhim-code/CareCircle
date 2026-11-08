@@ -11,7 +11,7 @@ from app.db.session import get_db
 from app.schemas.auth import MeOut, MeUpdateIn, UserOut
 from app.schemas.base import CamelModel
 from app.schemas.common import PersonOut, UtcDateTime
-from app.schemas.me import PreferencesIO, PushTokenIn
+from app.schemas.me import PreferencesIn, PreferencesOut, PushTokenIn
 
 router = APIRouter(prefix="/me", tags=["me"])
 
@@ -49,24 +49,31 @@ def _preferences(db: Session, me: CurrentUser) -> UserPreferences:
     return prefs
 
 
-@router.get("/preferences", response_model=PreferencesIO)
+@router.get("/preferences", response_model=PreferencesOut)
 def get_preferences(me: CurrentUser = Depends(current_user),
-                    db: Session = Depends(get_db)) -> PreferencesIO:
+                    db: Session = Depends(get_db)) -> PreferencesOut:
     prefs = _preferences(db, me)
     db.commit()
-    return PreferencesIO.model_validate(prefs)
+    return PreferencesOut.model_validate(prefs)
 
 
-@router.put("/preferences", response_model=PreferencesIO)
-def put_preferences(body: PreferencesIO, me: CurrentUser = Depends(current_user),
-                    db: Session = Depends(get_db)) -> PreferencesIO:
+@router.put("/preferences", response_model=PreferencesOut)
+def put_preferences(body: PreferencesIn, me: CurrentUser = Depends(current_user),
+                    db: Session = Depends(get_db)) -> PreferencesOut:
+    """Save the settings. The alarm settings may be left out to keep their saved value."""
     prefs = _preferences(db, me)
     prefs.larger_text = body.larger_text
     prefs.reminder_notifications = body.reminder_notifications
     prefs.missed_dose_email = body.missed_dose_email
     prefs.missed_dose_call = body.missed_dose_call
+    if body.alarm_sound is not None:
+        prefs.alarm_sound = body.alarm_sound
+    if body.alarm_vibration is not None:
+        prefs.alarm_vibration = body.alarm_vibration
+    if body.snooze_minutes is not None:
+        prefs.snooze_minutes = body.snooze_minutes
     db.commit()
-    return PreferencesIO.model_validate(prefs)
+    return PreferencesOut.model_validate(prefs)
 
 
 @router.put("/push-token", status_code=204)

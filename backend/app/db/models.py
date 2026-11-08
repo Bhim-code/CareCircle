@@ -261,8 +261,16 @@ class UserPreferences(Base):
                                                     server_default=text("true"))
     missed_dose_call: Mapped[bool] = mapped_column(Boolean, nullable=False,
                                                    server_default=text("false"))
+    # The medicine alarm on the patient's phone (saved here so a new phone gets them back).
+    alarm_sound: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    alarm_vibration: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    snooze_minutes: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default=text("10"))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False,
                                                  server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        CheckConstraint("snooze_minutes IN (5, 10, 15)", name="user_preferences_snooze_minutes_check"),
+    )
 
 
 class PushToken(Base):

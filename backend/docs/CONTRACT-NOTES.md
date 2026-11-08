@@ -127,6 +127,11 @@ default). Permissions: `tasks.view`, `tasks.complete`.
 
 **Me**
 - `PATCH /me` `{ name?, timezone? }`. Role and email cannot be changed (422).
+- `GET /me/preferences` also returns the medicine alarm's settings: `alarmSound` (true),
+  `alarmVibration` (true) and `snoozeMinutes` (10; only 5, 10 or 15). Defaults in brackets.
+  On `PUT /me/preferences` the four contract switches stay required and the three alarm
+  settings are **optional**: leave one out to keep its saved value. So an app that sends
+  only the four never resets the alarm. Any other snooze value gives 422.
 - `DELETE /me/push-token` `{ token }`: call on sign-out so the phone stops receiving pushes.
 - `GET /me/access-log` (patients): who viewed their data and when, newest first.
   A nice "Privacy" screen; it also answers the consent question in Issue 11.

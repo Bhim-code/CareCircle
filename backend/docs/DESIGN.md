@@ -143,7 +143,7 @@ How this is enforced:
 
 ## 5. Testing
 
-`pytest` runs 209 automated tests against a real PostgreSQL database built from the
+`pytest` runs 211 automated tests against a real PostgreSQL database built from the
 migrations (about 20 seconds). Each test starts with empty tables.
 
 | File | What it proves |
@@ -158,7 +158,7 @@ migrations (about 20 seconds). Each test starts with empty tables.
 | `test_companies.py` (16) | Two companies: each supervisor sees all of their own company's patients and caregivers and none of the other's (lists, search, by id, CSV, overview, access log); a supervisor can switch only their own company's caregivers on or off (signs them out at once); only admins create companies and move people |
 | `test_skip_doses.py` (14) | Skip only by the patient, once, not when taken, not hours early; take after skip; skipped doses get no missed-dose alert or due push; never both taken and skipped (database rule); staff see skipped separately; caregivers read linked patients' doses only, logged, and cannot confirm or skip |
 | `test_jobs.py` (10) | Missed-dose alert after 60 minutes, sent once, only to linked caregivers who opted in, retried on failure; due pushes once; no medicine names |
-| `test_care_links.py` (8), `test_preferences.py` (3) | Invitations, accepting, ending; demo addresses work outside production only; settings per person |
+| `test_care_links.py` (8), `test_preferences.py` (5) | Invitations, accepting, ending; demo addresses work outside production only; settings per person, alarm settings kept when an older app saves only four, snooze only 5/10/15 (also a database rule) |
 | `test_schema.py` (7), `test_errors_and_cors.py` (13), `test_health.py` (4) | Database constraints and append-only log; models match migrations; error format; CORS; configuration |
 
 GitHub Actions runs the same suite on every push and pull request
