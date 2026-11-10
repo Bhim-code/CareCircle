@@ -13,6 +13,7 @@ import { CaregiverDoses } from '@/presentation/components/CaregiverDoses';
 import { ShortcutTile } from '@/presentation/components/ShortcutTile';
 import { StatusPill } from '@/presentation/components/StatusPill';
 import { TextLink } from '@/presentation/components/TextLink';
+import { InlineLoading } from '@/presentation/components/InlineLoading';
 import { useCaregiverDoses } from '@/presentation/hooks/useCaregiverDoses';
 import { useNow } from '@/presentation/hooks/useNow';
 import { useAuth } from '@/presentation/providers/AuthProvider';
@@ -112,7 +113,7 @@ export default function HomeScreen() {
             <View style={styles.flex}>
               {!isPatient ? (
                 care.status === 'loading' ? (
-                  <AppText variant="label">Loading your patients' doses…</AppText>
+                  <InlineLoading label="Loading your patients' doses…" />
                 ) : care.status === 'error' ? (
                   <AppText variant="label">We could not load the doses.</AppText>
                 ) : careToday.missed > 0 ? (
@@ -123,7 +124,7 @@ export default function HomeScreen() {
                   <AppText variant="label">No missed doses right now</AppText>
                 )
               ) : status === 'loading' ? (
-                <AppText variant="label">Loading your reminders…</AppText>
+                <InlineLoading label="Loading your reminders…" />
               ) : status === 'error' ? (
                 <>
                   <AppText variant="label">We could not load your reminders.</AppText>

@@ -36,6 +36,7 @@ import { Card } from '@/presentation/components/Card';
 import { EntryCard } from '@/presentation/components/EntryCard';
 import { FilterChips } from '@/presentation/components/FilterChips';
 import { Screen } from '@/presentation/components/Screen';
+import { InlineLoading } from '@/presentation/components/InlineLoading';
 import { useAuth } from '@/presentation/providers/AuthProvider';
 import { useDocumentList } from '@/presentation/providers/HealthRecordsProvider';
 import { useEntries } from '@/presentation/providers/RecordEntriesProvider';
@@ -138,9 +139,7 @@ function EntriesList() {
 
   if (status === 'loading') {
     return (
-      <AppText color={colors.inkSoft} accessibilityLiveRegion="polite">
-        Loading records…
-      </AppText>
+      <InlineLoading label="Loading records…" />
     );
   }
 
@@ -198,9 +197,7 @@ function RecordsList({ accent, canAdd }: { accent: string; canAdd: boolean }) {
 
   if (status === 'loading') {
     return (
-      <AppText color={colors.inkSoft} accessibilityLiveRegion="polite">
-        Loading your records…
-      </AppText>
+      <InlineLoading label="Loading your records…" />
     );
   }
 

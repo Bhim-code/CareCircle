@@ -15,6 +15,7 @@ import { Card } from '@/presentation/components/Card';
 import { Screen } from '@/presentation/components/Screen';
 import { StatusPill } from '@/presentation/components/StatusPill';
 import { TextLink } from '@/presentation/components/TextLink';
+import { InlineLoading } from '@/presentation/components/InlineLoading';
 import { useNow } from '@/presentation/hooks/useNow';
 import { useTodaysReminders } from '@/presentation/providers/RemindersProvider';
 import { colors, spacing } from '@/presentation/theme/theme';
@@ -49,9 +50,7 @@ export default function ReminderDetailScreen() {
       </View>
 
       {status === 'loading' ? (
-        <AppText color={colors.inkSoft} accessibilityLiveRegion="polite">
-          Loading…
-        </AppText>
+        <InlineLoading label="Loading…" />
       ) : status === 'error' ? (
         <>
           <Banner tone="error">We could not load this reminder. Please try again.</Banner>

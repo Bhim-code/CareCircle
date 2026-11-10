@@ -11,6 +11,7 @@ import { Can } from '@/presentation/components/Can';
 import { Card } from '@/presentation/components/Card';
 import { Screen } from '@/presentation/components/Screen';
 import { StatusPill } from '@/presentation/components/StatusPill';
+import { InlineLoading } from '@/presentation/components/InlineLoading';
 import { useNow } from '@/presentation/hooks/useNow';
 import { useMedicineList } from '@/presentation/providers/MedicinesProvider';
 import { useTodaysReminders } from '@/presentation/providers/RemindersProvider';
@@ -43,9 +44,7 @@ function ReminderList() {
 
   if (status === 'loading') {
     return (
-      <AppText color={colors.inkSoft} accessibilityLiveRegion="polite">
-        Loading your medicines…
-      </AppText>
+      <InlineLoading label="Loading your medicines…" />
     );
   }
 
@@ -121,9 +120,7 @@ function MyMedicines() {
       {failure ? <Banner tone="error">{failure}</Banner> : null}
 
       {status === 'loading' ? (
-        <AppText color={colors.inkSoft} accessibilityLiveRegion="polite">
-          Loading your medicines…
-        </AppText>
+        <InlineLoading label="Loading your medicines…" />
       ) : null}
       {status === 'error' ? (
         <>

@@ -9,6 +9,7 @@ import { Button } from '@/presentation/components/Button';
 import { Card } from '@/presentation/components/Card';
 import { Screen } from '@/presentation/components/Screen';
 import { TextLink } from '@/presentation/components/TextLink';
+import { InlineLoading } from '@/presentation/components/InlineLoading';
 import { useAuth } from '@/presentation/providers/AuthProvider';
 import { useDocumentList } from '@/presentation/providers/HealthRecordsProvider';
 import { colors, radius, spacing } from '@/presentation/theme/theme';
@@ -74,7 +75,7 @@ export default function DocumentScreen() {
             Document
           </AppText>
           {status === 'loading' ? (
-            <AppText color={colors.inkSoft}>Loading…</AppText>
+            <InlineLoading label="Loading…" />
           ) : (
             <Banner tone="error">This document is no longer in your list.</Banner>
           )}

@@ -30,6 +30,7 @@ import { PhotoCapture } from '@/presentation/components/PhotoCapture';
 import { Screen } from '@/presentation/components/Screen';
 import { TextField } from '@/presentation/components/TextField';
 import { TextLink } from '@/presentation/components/TextLink';
+import { InlineLoading } from '@/presentation/components/InlineLoading';
 import { useAuth } from '@/presentation/providers/AuthProvider';
 import { useEntries } from '@/presentation/providers/RecordEntriesProvider';
 import { colors, radius, spacing } from '@/presentation/theme/theme';
@@ -59,7 +60,7 @@ export default function EntryFormScreen() {
     return (
       <Screen>
         <BackLink />
-        <AppText color={colors.inkSoft}>Loading…</AppText>
+        <InlineLoading label="Loading…" />
       </Screen>
     );
   }
