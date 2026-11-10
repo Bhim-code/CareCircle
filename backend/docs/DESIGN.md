@@ -143,7 +143,7 @@ How this is enforced:
 
 ## 5. Testing
 
-`pytest` runs 211 automated tests against a real PostgreSQL database built from the
+`pytest` runs 213 automated tests against a real PostgreSQL database built from the
 migrations (about 20 seconds). Each test starts with empty tables.
 
 | File | What it proves |
@@ -153,13 +153,13 @@ migrations (about 20 seconds). Each test starts with empty tables.
 | `test_medicines_reminders.py` (13) | Own reminders only; the patient's local day; daylight saving; idempotent generation; "I took it" only by the owner and never by the server |
 | `test_admin.py` (9) | Patients and caregivers refused (and logged); supervisor cannot change patients or settings; every view and export logged; CSV injection safe; patients see who viewed them |
 | `test_care_tasks.py` (22) | Status rules over a day (upcoming, due, done, late, skipped, missed) in the client's time zone; tasks added after their time start the next day; weekdays, dates, removal; rescheduling keeps history; done once, undo by the same person, skip needs a reason, no future days; strangers and other companies refused; extra work; permissions; the Today table; caregiver-then-supervisor alerts once, with no task name in the email; caregivers plan only with the tasks.plan permission, only for linked clients, edit only tasks they added, and never remove tasks (supervisors only) |
-| `test_documents.py` (23) | Patient and linked caregiver upload real PDFs, JPEG, PNG and iPhone HEIC (converted to JPEG); GPS and camera data removed; fake, broken, oversized, scripted and attachment-carrying files refused; strangers cannot upload, list or open (404, forged and expired links fail); ending a link ends access; permissions switch uploading and viewing off; delete rules; storage cannot escape its folder |
+| `test_documents.py` (24) | Patient and linked caregiver upload real PDFs, JPEG, PNG and iPhone HEIC (converted to JPEG); GPS and camera data removed; fake, broken, oversized, scripted and attachment-carrying files refused; strangers cannot upload, list or open (404, forged and expired links fail); ending a link ends access; permissions switch uploading and viewing off; delete rules; storage cannot escape its folder; a missing file gets a plain "Choose a file to upload." |
 | `test_people_roles.py` (17) | New sign-ups wait with no access; assigning a role unlocks the app and signs them out; supervisors can make supervisors; nobody changes their own role or permissions; last supervisor protected; only admins give admin; patient-to-caregiver ends links but keeps records; extra permissions and role permissions take effect at once; custom roles; a limited supervisor role is enforced; create person with set-password email; profile, photo and history (append-only); delete keeps records; other companies out of reach |
 | `test_companies.py` (16) | Two companies: each supervisor sees all of their own company's patients and caregivers and none of the other's (lists, search, by id, CSV, overview, access log); a supervisor can switch only their own company's caregivers on or off (signs them out at once); only admins create companies and move people |
 | `test_skip_doses.py` (14) | Skip only by the patient, once, not when taken, not hours early; take after skip; skipped doses get no missed-dose alert or due push; never both taken and skipped (database rule); staff see skipped separately; caregivers read linked patients' doses only, logged, and cannot confirm or skip |
 | `test_jobs.py` (10) | Missed-dose alert after 60 minutes, sent once, only to linked caregivers who opted in, retried on failure; due pushes once; no medicine names |
 | `test_care_links.py` (8), `test_preferences.py` (5) | Invitations, accepting, ending; demo addresses work outside production only; settings per person, alarm settings kept when an older app saves only four, snooze only 5/10/15 (also a database rule) |
-| `test_schema.py` (7), `test_errors_and_cors.py` (13), `test_health.py` (4) | Database constraints and append-only log; models match migrations; error format; CORS; configuration |
+| `test_schema.py` (7), `test_errors_and_cors.py` (14), `test_health.py` (4) | Database constraints and append-only log; models match migrations; error format (never shows Python type names); CORS; configuration |
 
 GitHub Actions runs the same suite on every push and pull request
 (`.github/workflows/backend.yml`).

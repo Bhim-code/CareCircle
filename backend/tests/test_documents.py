@@ -141,6 +141,17 @@ def test_form_fields_are_checked(client, people):
     assert future.status_code == 422 and "recordedOn" in future.json()["error"]["fields"]
 
 
+def test_missing_or_text_file_gets_a_plain_message(client, people):
+    """A web form that cannot attach the file sends text such as "[object Object]"."""
+    ana = people[0]
+    form = {"title": "Blood test", "category": "lab_report"}
+    for data in ({**form, "file": "[object Object]"}, form):
+        response = client.post("/health-records", data=data, headers=ana.auth)
+        assert response.status_code == 422
+        assert response.json()["error"]["fields"] == {"file": "Choose a file to upload."}
+        assert "<class" not in response.text and "UploadFile" not in response.text
+
+
 def test_dangerous_file_names_are_cleaned(client, people):
     made = upload(client, people[0], pdf_bytes(), name='../../etc/pa"ss<script>.exe.pdf')
     name = made.json()["fileName"]
