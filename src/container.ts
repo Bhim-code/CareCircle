@@ -50,7 +50,6 @@ import { HttpHealthRecordService } from './infrastructure/http/HttpHealthRecordS
 import { HttpRecordEntryService } from './infrastructure/http/HttpRecordEntryService';
 import { HttpMedicineService } from './infrastructure/http/HttpMedicineService';
 import { HttpReminderService } from './infrastructure/http/HttpReminderService';
-import { SkippedDoseStore } from './infrastructure/http/SkippedDoseStore';
 import { TokenStore } from './infrastructure/http/TokenStore';
 import { AsyncSessionStorage } from './infrastructure/storage/AsyncSessionStorage';
 import { EmptyCareLinkService } from './infrastructure/supabase/EmptyCareLinkService';
@@ -195,7 +194,7 @@ export function createProfileService(): IProfileService | null {
 export function createReminderService(): IReminderService {
   if (shouldUseDemo()) return new DemoReminderService(300, sharedDemoMedicines());
   if (isApiConfigured) {
-    return new HttpReminderService(createApiClient(), new SkippedDoseStore(new AsyncSessionStorage()));
+    return new HttpReminderService(createApiClient());
   }
   return new EmptyReminderService();
 }

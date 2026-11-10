@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { reminderStatus } from '../src/application/reminders';
+import { isAlreadyTaken } from '../src/presentation/hooks/useReminders';
 import { ApiClient } from '../src/infrastructure/http/ApiClient';
 import { ApiError } from '../src/infrastructure/http/ApiError';
 import { HttpReminderService } from '../src/infrastructure/http/HttpReminderService';
-import { MAX_REMEMBERED_SKIPS, SkippedDoseStore } from '../src/infrastructure/http/SkippedDoseStore';
 import { TokenStore } from '../src/infrastructure/http/TokenStore';
 import { MemorySessionStorage } from '../src/infrastructure/storage/MemorySessionStorage';
 
@@ -43,9 +43,7 @@ async function setup(
       return handler(entry);
     }) as unknown as typeof fetch,
   });
-  const storage = new MemorySessionStorage();
-  const skipped = new SkippedDoseStore(storage);
-  return { service: new HttpReminderService(api, skipped, timeZone), seen, skipped, storage };
+  return { service: new HttpReminderService(api, timeZone), seen };
 }
 
 describe('HttpReminderService.listForDay', () => {
@@ -147,75 +145,57 @@ describe('HttpReminderService.acknowledge', () => {
 });
 
 describe('HttpReminderService.skip', () => {
-  it('remembers the skip on this phone and shows it on the next load', async () => {
-    const { service, seen } = await setup(() => json(200, [METFORMIN, VITAMIN]));
+  it('tells the server, which keeps the skip', async () => {
+    const { service, seen } = await setup(() => new Response(null, { status: 204 }));
     await service.skip('u-1', 'r-1');
-    assert.equal(seen.length, 0, 'the backend has no skip yet, so nothing is sent');
-    const list = await service.listForDay('u-1', '2026-10-29');
-    assert.equal(list.find((r) => r.id === 'r-1')?.skipped, true);
-    assert.equal(list.find((r) => r.id === 'r-2')?.skipped, false);
+    assert.deepEqual(seen.map((s) => `${s.method} ${s.url}`), ['POST /reminders/r-1/skip']);
+    assert.equal(seen[0].auth, 'Bearer access-1');
   });
 
-  it('shows the skipped dose as skipped, not missed or due', async () => {
-    const { service } = await setup(() => json(200, [METFORMIN]));
-    await service.skip('u-1', 'r-1');
+  it('shows a dose the server says was skipped as skipped, never missed or due', async () => {
+    const { service } = await setup(() => json(200, [{ ...METFORMIN, skipped: true, status: 'skipped' }]));
     const [dose] = await service.listForDay('u-1', '2026-10-29');
+    assert.equal(dose.skipped, true);
     const hoursLater = new Date(Date.parse(METFORMIN.scheduledAt) + 3 * 3_600_000);
     assert.equal(reminderStatus(dose, hoursLater), 'skipped');
   });
 
-  it('never calls a dose skipped once the server says it was taken', async () => {
-    const { service, skipped } = await setup(() => json(200, [{ ...METFORMIN, acknowledged: true }]));
-    await skipped.add('u-1', 'r-1');
+  it('treats a dose with no skipped flag (an older server) as not skipped', async () => {
+    const { service } = await setup(() => json(200, [METFORMIN, VITAMIN]));
+    const list = await service.listForDay('u-1', '2026-10-29');
+    assert.deepEqual(list.map((r) => r.skipped), [false, false]);
+  });
+
+  it('never calls a dose skipped once it was taken', async () => {
+    const { service } = await setup(() => json(200, [{ ...METFORMIN, acknowledged: true, skipped: true }]));
     const [dose] = await service.listForDay('u-1', '2026-10-29');
     assert.equal(dose.skipped, false);
     assert.equal(reminderStatus(dose, new Date(Date.parse(METFORMIN.scheduledAt) + 1000)), 'acknowledged');
   });
 
-  it('keeps one person’s skips from showing for another person on the same phone', async () => {
-    const { service } = await setup(() => json(200, [METFORMIN]));
-    await service.skip('u-1', 'r-1');
-    assert.equal((await service.listForDay('u-2', '2026-10-29'))[0].skipped, false);
+  it('fails when the server says the dose is already taken, with a code the screen can recognise', async () => {
+    const { service } = await setup(() => json(409, { error: { code: 'already_taken', message: 'This dose is already marked as taken.' } }));
+    await assert.rejects(service.skip('u-1', 'r-1'), (e: ApiError) => e.status === 409 && isAlreadyTaken(e));
+  });
+
+  it('fails when the dose is not due yet', async () => {
+    const { service } = await setup(() => json(422, { error: { code: 'not_due', message: 'This dose is not due yet.' } }));
+    await assert.rejects(service.skip('u-1', 'r-1'), (e: ApiError) => e.status === 422 && !isAlreadyTaken(e));
+  });
+
+  it('fails when offline, so the screen can say it was not saved', async () => {
+    const { service } = await setup(() => {
+      throw new TypeError('Network request failed');
+    });
+    await assert.rejects(service.skip('u-1', 'r-1'), (e: ApiError) => e.code === 'network');
   });
 });
 
-describe('SkippedDoseStore', () => {
-  it('remembers skips after the app restarts', async () => {
-    const storage = new MemorySessionStorage();
-    await new SkippedDoseStore(storage).add('u-1', 'r-1');
-    assert.deepEqual([...(await new SkippedDoseStore(storage).skippedBy('u-1'))], ['r-1']);
-  });
-
-  it('counts two quick skips both, and the same one only once', async () => {
-    const store = new SkippedDoseStore(new MemorySessionStorage());
-    await Promise.all([store.add('u-1', 'a'), store.add('u-1', 'b'), store.add('u-1', 'a')]);
-    assert.deepEqual([...(await store.skippedBy('u-1'))].sort(), ['a', 'b']);
-  });
-
-  it('keeps only the most recent skips', async () => {
-    const store = new SkippedDoseStore(new MemorySessionStorage());
-    for (let i = 0; i < MAX_REMEMBERED_SKIPS + 5; i += 1) await store.add('u-1', `d-${i}`);
-    const kept = await store.skippedBy('u-1');
-    assert.equal(kept.size, MAX_REMEMBERED_SKIPS);
-    assert.equal(kept.has('d-0'), false);
-    assert.equal(kept.has(`d-${MAX_REMEMBERED_SKIPS + 4}`), true);
-  });
-
-  it('starts empty when the saved data is damaged', async () => {
-    for (const junk of ['not json', '{"a":1}', '42', 'null']) {
-      const storage = new MemorySessionStorage();
-      await storage.setItem('carecircle.skipped.u-1', junk);
-      assert.equal((await new SkippedDoseStore(storage).skippedBy('u-1')).size, 0, junk);
-    }
-  });
-
-  it('reports a failed save instead of pretending the skip worked', async () => {
-    const storage = new MemorySessionStorage();
-    storage.setItem = async () => {
-      throw new Error('disk full');
-    };
-    const store = new SkippedDoseStore(storage);
-    await assert.rejects(store.add('u-1', 'r-1'), /disk full/);
-    assert.equal((await store.skippedBy('u-1')).has('r-1'), false);
+describe('isAlreadyTaken', () => {
+  it('only matches the already_taken code', () => {
+    assert.equal(isAlreadyTaken({ code: 'already_taken' }), true);
+    assert.equal(isAlreadyTaken({ code: 'not_due' }), false);
+    assert.equal(isAlreadyTaken(new Error('x')), false);
+    assert.equal(isAlreadyTaken(null), false);
   });
 });
