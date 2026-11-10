@@ -10,6 +10,7 @@ import { Banner } from './Banner';
 import { Button } from './Button';
 import { FilterChips } from './FilterChips';
 import { StatusPill } from './StatusPill';
+import { InlineLoading } from './InlineLoading';
 
 interface Props {
   status: CaregiverDosesStatus;
@@ -34,9 +35,7 @@ export function CaregiverDoses({ status, doses, message, retry, now }: Props) {
       </AppText>
 
       {status === 'loading' ? (
-        <AppText color={colors.inkSoft} accessibilityLiveRegion="polite">
-          Loading…
-        </AppText>
+        <InlineLoading label="Loading…" />
       ) : null}
 
       {status === 'error' ? (

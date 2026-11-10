@@ -11,6 +11,7 @@ import { Card } from '@/presentation/components/Card';
 import { Screen } from '@/presentation/components/Screen';
 import { TextField } from '@/presentation/components/TextField';
 import { TextLink } from '@/presentation/components/TextLink';
+import { InlineLoading } from '@/presentation/components/InlineLoading';
 import { useCareLinks } from '@/presentation/hooks/useCareLinks';
 import { useAuth } from '@/presentation/providers/AuthProvider';
 import { colors, radius, spacing } from '@/presentation/theme/theme';
@@ -50,9 +51,7 @@ export default function CareLinksScreen() {
       {isPatient ? <InviteForm ownEmail={user.email} onInvite={invite} /> : null}
 
       {status === 'loading' ? (
-        <AppText color={colors.inkSoft} accessibilityLiveRegion="polite">
-          Loading…
-        </AppText>
+        <InlineLoading label="Loading…" />
       ) : null}
 
       {status === 'error' ? (

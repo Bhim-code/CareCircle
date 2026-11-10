@@ -19,6 +19,7 @@ import { Button } from '@/presentation/components/Button';
 import { Screen } from '@/presentation/components/Screen';
 import { TaskStatusPill } from '@/presentation/components/TaskStatusPill';
 import { TextField } from '@/presentation/components/TextField';
+import { InlineLoading } from '@/presentation/components/InlineLoading';
 import { useNow } from '@/presentation/hooks/useNow';
 import { useAuth } from '@/presentation/providers/AuthProvider';
 import { useCareTaskList } from '@/presentation/providers/CareTasksProvider';
@@ -53,9 +54,7 @@ function TaskLists() {
 
   if (status === 'loading') {
     return (
-      <AppText color={colors.inkSoft} accessibilityLiveRegion="polite">
-        Loading the tasks…
-      </AppText>
+      <InlineLoading label="Loading the tasks…" />
     );
   }
   if (status === 'error') {

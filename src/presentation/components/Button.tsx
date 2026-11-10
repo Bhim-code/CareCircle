@@ -1,7 +1,8 @@
 import React from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { colors, radius, spacing, touchTarget, typography } from '../theme/theme';
 import { AppText } from './AppText';
+import { LoadingDots } from './LoadingDots';
 
 type Variant = 'primary' | 'secondary' | 'danger';
 
@@ -65,7 +66,7 @@ export function Button({
     >
       <View style={styles.content}>
         {loading ? (
-          <ActivityIndicator color={colorsFor.text} />
+          <LoadingDots size={8} color={colorsFor.text} announce={false} />
         ) : (
           <AppText style={typography.label} color={colorsFor.text}>
             {label}

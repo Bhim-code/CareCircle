@@ -8,6 +8,7 @@ import { Banner } from '@/presentation/components/Banner';
 import { Button } from '@/presentation/components/Button';
 import { Screen } from '@/presentation/components/Screen';
 import { TextLink } from '@/presentation/components/TextLink';
+import { InlineLoading } from '@/presentation/components/InlineLoading';
 import { useAccessLog } from '@/presentation/hooks/useAccessLog';
 import { useAuth } from '@/presentation/providers/AuthProvider';
 import { colors, radius, spacing } from '@/presentation/theme/theme';
@@ -43,9 +44,7 @@ export default function AccessLogScreen() {
       {!allowed ? <Banner tone="error">Only patients can see who has viewed their records.</Banner> : null}
 
       {allowed && status === 'loading' ? (
-        <AppText color={colors.inkSoft} accessibilityLiveRegion="polite">
-          Loading…
-        </AppText>
+        <InlineLoading label="Loading…" />
       ) : null}
 
       {allowed && status === 'error' ? (

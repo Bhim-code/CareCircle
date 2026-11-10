@@ -15,7 +15,7 @@
     "android": {
       "package": "com.carecircle.app",
       "adaptiveIcon": {
-        "backgroundColor": "#1F5F7A",
+        "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
