@@ -33,19 +33,33 @@ function fakeSync(overrides: Partial<IPreferencesSync> = {}) {
 }
 
 describe('synced settings', () => {
-  it('takes only the four the server keeps, and puts them back without touching the phone-only ones', () => {
-    assert.deepEqual(Object.keys(syncedPart(local)).sort(), ['largerText', 'missedDoseCall', 'missedDoseEmail', 'reminderNotifications']);
+  it('sends the four switches and the three alarm settings', () => {
+    assert.deepEqual(
+      Object.keys(syncedPart(local)).sort(),
+      ['alarmSound', 'alarmVibration', 'largerText', 'missedDoseCall', 'missedDoseEmail', 'reminderNotifications', 'snoozeMinutes'],
+    );
+  });
+  it('keeps the phone alarm settings when the server leaves them out', () => {
     const merged = withSynced(local, server);
     assert.equal(merged.largerText, false);
     assert.equal(merged.missedDoseCall, true);
     assert.equal(merged.alarmSound, false);
     assert.equal(merged.snoozeMinutes, 15);
   });
+  it('takes the alarm settings the server sends', () => {
+    const merged = withSynced(local, { ...server, alarmSound: true, alarmVibration: false, snoozeMinutes: 5 });
+    assert.equal(merged.alarmSound, true);
+    assert.equal(merged.alarmVibration, false);
+    assert.equal(merged.snoozeMinutes, 5);
+  });
+  it('keeps the phone snooze length when the server sends one the app does not offer', () => {
+    assert.equal(withSynced(local, { ...server, snoozeMinutes: 7 }).snoozeMinutes, 15);
+  });
   it('knows which changes reach the server', () => {
     assert.ok(touchesSynced({ largerText: true }));
-    assert.ok(touchesSynced({ alarmSound: false, missedDoseCall: true }));
-    assert.equal(touchesSynced({ alarmSound: false }), false);
-    assert.equal(touchesSynced({ snoozeMinutes: 5 }), false);
+    assert.ok(touchesSynced({ alarmSound: false }));
+    assert.ok(touchesSynced({ snoozeMinutes: 5 }));
+    assert.equal(touchesSynced({}), false);
   });
 });
 
@@ -57,7 +71,14 @@ describe('reconcile', () => {
     assert.ok(result.status === 'synced');
     assert.equal(result.preferences.missedDoseCall, true);
     assert.equal(result.preferences.largerText, false);
-    assert.equal(result.preferences.snoozeMinutes, 15); // the phone's own choice stays
+    assert.equal(result.preferences.snoozeMinutes, 15); // this server sent no alarm settings, so the phone's stay
+  });
+  it('gives a new phone the alarm settings from the account', async () => {
+    const { sync } = fakeSync({ fetch: async () => ({ ...server, alarmSound: true, alarmVibration: false, snoozeMinutes: 5 }) });
+    const result = await reconcile(sync, DEFAULT_PREFERENCES, false);
+    assert.ok(result.status === 'synced');
+    assert.equal(result.preferences.alarmVibration, false);
+    assert.equal(result.preferences.snoozeMinutes, 5);
   });
   it('sends the phone settings when a change has not reached the server yet', async () => {
     const { sync, calls } = fakeSync();
@@ -113,6 +134,18 @@ describe('HttpPreferencesSync', () => {
     assert.equal(calls[0].method, 'PUT');
     assert.deepEqual(calls[0].body, { ...server, largerText: true });
     assert.equal(saved.largerText, true);
+  });
+  it('reads and sends the alarm settings too', async () => {
+    const alarm = { alarmSound: false, alarmVibration: true, snoozeMinutes: 15 as const };
+    const { client, calls } = await api((c) => json(200, c.body ?? { ...server, ...alarm }));
+    const sync = new HttpPreferencesSync(client);
+    assert.deepEqual(await sync.fetch(), { ...server, ...alarm });
+    await sync.push({ ...server, ...alarm });
+    assert.deepEqual(calls[1].body, { ...server, ...alarm });
+  });
+  it('drops a snooze length the app does not offer, and a setting of the wrong kind', async () => {
+    const { client } = await api(() => json(200, { ...server, alarmSound: 'yes', alarmVibration: true, snoozeMinutes: 7 }));
+    assert.deepEqual(await new HttpPreferencesSync(client).fetch(), { ...server, alarmVibration: true });
   });
   it('rejects an answer it cannot read', async () => {
     const { client } = await api(() => json(200, { largerText: 'yes' }));
