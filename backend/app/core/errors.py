@@ -66,8 +66,14 @@ def _field_name(location: tuple) -> str:
 
 
 def _friendly(err: dict) -> str:
-    """Plain-language messages for the common cases; pydantic's text otherwise."""
+    """Plain-language messages for the common cases; pydantic's text otherwise.
+    Never shows Python internals (type names) to the person."""
     kind, ctx = err.get("type", ""), err.get("ctx") or {}
+    message = str(err.get("msg", "Invalid value."))
+    if _field_name(tuple(err.get("loc", ()))) == "file" or "UploadFile" in message:
+        # A missing file, or text sent where a file belongs (e.g. a web form that
+        # could not attach the file).
+        return "Choose a file to upload."
     if kind == "string_too_long":
         return f"Please keep this under {ctx.get('max_length')} characters."
     if kind == "string_too_short":
@@ -79,7 +85,8 @@ def _friendly(err: dict) -> str:
         return f"Choose one of: {ctx.get('expected', 'the allowed values')}."
     if kind == "extra_forbidden":
         return "This field is not allowed."
-    message = str(err.get("msg", "Invalid value."))
+    if "<class" in message or "UploadFile" in message:
+        return "Please check this value."
     return message.removeprefix("Value error, ")
 
 

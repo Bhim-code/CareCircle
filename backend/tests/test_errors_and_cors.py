@@ -126,3 +126,12 @@ def test_env_example_loads_as_copied(monkeypatch):
 def test_host_style_database_urls_are_accepted(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "postgres://u:p@db.example:5432/cc")
     assert Settings().database_url == "postgresql+psycopg://u:p@db.example:5432/cc"
+
+
+def test_error_messages_never_show_python_type_names():
+    from app.core.errors import _friendly
+    leaked = {"type": "value_error", "loc": ("body", "photo"),
+              "msg": "Expected UploadFile, received: <class 'str'>"}
+    assert _friendly(leaked) == "Choose a file to upload."
+    other = {"type": "is_instance_of", "loc": ("body", "x"), "msg": "Input should be an instance of <class 'Foo'>"}
+    assert _friendly(other) == "Please check this value."
