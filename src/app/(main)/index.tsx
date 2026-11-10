@@ -1,16 +1,19 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
-import React from 'react';
+import React, { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { firstName, greetingFor } from '@/application/greeting';
-import { formatDate, formatTime, summarizeToday } from '@/application/reminders';
+import { formatDate, formatTime, dayKey, summarizeToday } from '@/application/reminders';
+import { createCaregiverDoseService } from '@/container';
 import { AppText } from '@/presentation/components/AppText';
 import { AlarmPermissionNotice } from '@/presentation/components/AlarmPermissionNotice';
 import { Can } from '@/presentation/components/Can';
+import { CaregiverDoses } from '@/presentation/components/CaregiverDoses';
 import { ShortcutTile } from '@/presentation/components/ShortcutTile';
 import { StatusPill } from '@/presentation/components/StatusPill';
 import { TextLink } from '@/presentation/components/TextLink';
+import { useCaregiverDoses } from '@/presentation/hooks/useCaregiverDoses';
 import { useNow } from '@/presentation/hooks/useNow';
 import { useAuth } from '@/presentation/providers/AuthProvider';
 import { useTextScale } from '@/presentation/providers/PreferencesProvider';
@@ -47,6 +50,12 @@ export default function HomeScreen() {
   const { status, reminders, retry } = useTodaysReminders();
   const today = summarizeToday(reminders, now);
 
+  // Caregivers see today's doses for the people they look after (read only).
+  const isCaregiver = !isPatient && (policy?.can('patients.monitor') ?? false);
+  const [doseService] = useState(createCaregiverDoseService);
+  const care = useCaregiverDoses(doseService, dayKey(now), isCaregiver);
+  const careToday = summarizeToday(care.doses, now);
+
   // The route guard guarantees both exist; this keeps TypeScript honest.
   if (!user || !policy) return null;
 
@@ -73,19 +82,25 @@ export default function HomeScreen() {
         {isPatient ? <AlarmPermissionNotice /> : null}
         <View style={styles.summary}>
           <AppText variant="label" color={colors.inkSoft}>
-            {isPatient ? "Today's reminders" : 'People you care for'}
+            {isPatient ? "Today's reminders" : "Today's doses for your patients"}
           </AppText>
           <View style={styles.summaryRow}>
             <AppText variant="title" style={{ fontSize: 48 * textScale, lineHeight: 54 * textScale }}>
-              {/* Patients: how many reminders today. Caregivers: nobody is linked yet, so 0. */}
-              {isPatient ? (status === 'ready' ? today.total : '–') : 0}
+              {/* Patients: how many reminders today. Caregivers: how many doses their patients have. */}
+              {isPatient ? (status === 'ready' ? today.total : '–') : care.status === 'ready' ? careToday.total : '–'}
             </AppText>
-            <AppText color={colors.inkSoft}>{isPatient ? 'scheduled today' : 'linked to you'}</AppText>
+            <AppText color={colors.inkSoft}>{isPatient ? 'scheduled today' : 'across your patients'}</AppText>
           </View>
           {isPatient && status === 'ready' && today.total > 0 ? (
             <AppText variant="caption" color={colors.inkSoft} style={styles.counts}>
               {today.acknowledged} taken · {today.remaining} to go · {today.missed} missed
               {today.skipped > 0 ? ` · ${today.skipped} skipped` : ''}
+            </AppText>
+          ) : null}
+          {!isPatient && care.status === 'ready' && careToday.total > 0 ? (
+            <AppText variant="caption" color={colors.inkSoft} style={styles.counts}>
+              {careToday.acknowledged} taken · {careToday.remaining} to go · {careToday.missed} missed
+              {careToday.skipped > 0 ? ` · ${careToday.skipped} skipped` : ''}
             </AppText>
           ) : null}
           <View style={styles.summaryNote}>
@@ -96,7 +111,17 @@ export default function HomeScreen() {
             />
             <View style={styles.flex}>
               {!isPatient ? (
-                <AppText variant="label">No alerts right now</AppText>
+                care.status === 'loading' ? (
+                  <AppText variant="label">Loading your patients' doses…</AppText>
+                ) : care.status === 'error' ? (
+                  <AppText variant="label">We could not load the doses.</AppText>
+                ) : careToday.missed > 0 ? (
+                  <AppText variant="label">
+                    {careToday.missed === 1 ? '1 missed dose today' : `${careToday.missed} missed doses today`}
+                  </AppText>
+                ) : (
+                  <AppText variant="label">No missed doses right now</AppText>
+                )
               ) : status === 'loading' ? (
                 <AppText variant="label">Loading your reminders…</AppText>
               ) : status === 'error' ? (
@@ -122,6 +147,10 @@ export default function HomeScreen() {
             </View>
           </View>
         </View>
+
+        {isCaregiver ? (
+          <CaregiverDoses status={care.status} doses={care.doses} message={care.message} retry={care.retry} now={now} />
+        ) : null}
 
         <View style={styles.tiles}>
           <ShortcutTile
