@@ -10,6 +10,7 @@ import type { IHealthRecordService } from './domain/services/IHealthRecordServic
 import type { IMedicineService } from './domain/services/IMedicineService';
 import type { IPreferencesStore } from './domain/services/IPreferencesStore';
 import type { IAccessLogService } from './domain/services/IAccessLogService';
+import type { ICaregiverDoseService } from './domain/services/ICaregiverDoseService';
 import type { IPushEvents } from './domain/services/IPushEvents';
 import type { IPreferencesSync } from './domain/services/IPreferencesSync';
 import type { IProfileService } from './domain/services/IProfileService';
@@ -30,6 +31,9 @@ import { NoopAlarmScheduler } from './infrastructure/notifications/NoopAlarmSche
 import { DemoAccessLogService } from './infrastructure/demo/DemoAccessLogService';
 import { EmptyAccessLogService } from './infrastructure/supabase/EmptyAccessLogService';
 import { HttpAccessLogService } from './infrastructure/http/HttpAccessLogService';
+import { DemoCaregiverDoseService } from './infrastructure/demo/DemoCaregiverDoseService';
+import { EmptyCaregiverDoseService } from './infrastructure/supabase/EmptyCaregiverDoseService';
+import { HttpCaregiverDoseService } from './infrastructure/http/HttpCaregiverDoseService';
 import { ExpoPushEvents } from './infrastructure/notifications/ExpoPushEvents';
 import { ExpoPushTokenSource } from './infrastructure/notifications/ExpoPushTokenSource';
 import { AsyncPushTokenStore } from './infrastructure/storage/AsyncPushTokenStore';
@@ -194,6 +198,13 @@ export function createReminderService(): IReminderService {
     return new HttpReminderService(createApiClient(), new SkippedDoseStore(new AsyncSessionStorage()));
   }
   return new EmptyReminderService();
+}
+
+/** A caregiver's view of their patients' doses: made-up in development, the backend when its address is set. */
+export function createCaregiverDoseService(): ICaregiverDoseService {
+  if (shouldUseDemo()) return new DemoCaregiverDoseService();
+  if (isApiConfigured) return new HttpCaregiverDoseService(createApiClient());
+  return new EmptyCaregiverDoseService();
 }
 
 let demoMedicines: DemoMedicineService | null = null;
