@@ -259,7 +259,7 @@ export default function ProfileScreen() {
           <AppText variant="caption" color={colors.inkSoft} style={styles.note}>
             {syncPending
               ? 'Saved on this phone. It will be saved to your account when you are back online.'
-              : 'These choices are saved with your account. Alarm sound, vibration and snooze stay on this phone.'}
+              : 'These choices are saved with your account, so a new phone has them too.'}
           </AppText>
         </Card>
       ) : null}

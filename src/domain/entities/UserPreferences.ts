@@ -21,14 +21,24 @@ export interface UserPreferences {
 
 /**
  * The settings the server keeps for the person, so they follow the person to a new phone.
- * The rest (alarm sound, vibration, snooze length) belong to one phone's alarm and stay on it.
+ * The four switches are always there. The three alarm settings are optional here, because a
+ * server that does not know them yet leaves them out, and then the phone keeps its own.
  */
 export type SyncedPreferences = Pick<
   UserPreferences,
   'largerText' | 'reminderNotifications' | 'missedDoseEmail' | 'missedDoseCall'
->;
+> &
+  Partial<Pick<UserPreferences, 'alarmSound' | 'alarmVibration' | 'snoozeMinutes'>>;
 
-export const SYNCED_FIELDS = ['largerText', 'reminderNotifications', 'missedDoseEmail', 'missedDoseCall'] as const;
+export const SYNCED_FIELDS = [
+  'largerText',
+  'reminderNotifications',
+  'missedDoseEmail',
+  'missedDoseCall',
+  'alarmSound',
+  'alarmVibration',
+  'snoozeMinutes',
+] as const;
 
 /** The snooze lengths a person can pick from. */
 export const SNOOZE_CHOICES = [5, 10, 15] as const;

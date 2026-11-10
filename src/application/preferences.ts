@@ -24,12 +24,30 @@ export function syncedPart(preferences: UserPreferences): SyncedPreferences {
     reminderNotifications: preferences.reminderNotifications,
     missedDoseEmail: preferences.missedDoseEmail,
     missedDoseCall: preferences.missedDoseCall,
+    alarmSound: preferences.alarmSound,
+    alarmVibration: preferences.alarmVibration,
+    snoozeMinutes: preferences.snoozeMinutes,
   };
 }
 
-/** The settings with the server's part put in. The phone-only settings are kept. */
+/**
+ * The settings with the server's part put in. Anything the server leaves out, or sends as
+ * something the app does not offer (a snooze length that is not in the list), stays as it is
+ * on the phone.
+ */
 export function withSynced(preferences: UserPreferences, synced: SyncedPreferences): UserPreferences {
-  return { ...preferences, ...syncedPart({ ...preferences, ...synced }) };
+  const snooze = synced.snoozeMinutes;
+  return {
+    ...preferences,
+    largerText: synced.largerText,
+    reminderNotifications: synced.reminderNotifications,
+    missedDoseEmail: synced.missedDoseEmail,
+    missedDoseCall: synced.missedDoseCall,
+    alarmSound: synced.alarmSound ?? preferences.alarmSound,
+    alarmVibration: synced.alarmVibration ?? preferences.alarmVibration,
+    snoozeMinutes:
+      snooze !== undefined && (SNOOZE_CHOICES as readonly number[]).includes(snooze) ? snooze : preferences.snoozeMinutes,
+  };
 }
 
 /** True when a change touches something the server keeps. */
